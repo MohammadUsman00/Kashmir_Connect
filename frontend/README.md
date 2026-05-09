@@ -2,6 +2,9 @@
 
 Modular frontend app for KashmirConnect, built with Vite + vanilla JavaScript and connected to the backend API.
 
+- `index.html` serves the original long-form responsive landing page.
+- `app.html` serves the modular dashboard app connected to backend APIs.
+
 ## Structure
 
 - `src/config` - environment config
@@ -22,6 +25,10 @@ Modular frontend app for KashmirConnect, built with Vite + vanilla JavaScript an
    - `VITE_API_BASE_URL=http://localhost:3000/api/v1`
 4. Start dev server:
    - `npm run dev`
+
+Pages:
+- Landing page: `http://localhost:5173/`
+- Dashboard app: `http://localhost:5173/app.html`
 
 ## Build For Deployment
 

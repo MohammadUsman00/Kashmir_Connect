@@ -1,113 +1,129 @@
 # KashmirConnect
 
-KashmirConnect is a full-stack platform for Kashmir's small businesses (artisans, farmers, tourism operators, and food sellers) to build digital storefronts, request authenticity badges, track analytics, and get AI business guidance using a free-tier-first architecture.
+KashmirConnect is a future-focused digital commerce platform for Kashmir's small businesses. It helps artisans, farmers, tourism operators, and local brands build a credible online presence, prove authenticity, understand customer behavior, and make better business decisions with AI.
 
-## Current Project Status
+## Vision
 
-- Backend is fully scaffolded in `kashmirconnect-backend/` with modular routes/controllers.
-- Frontend is fully modularized in `frontend/` (Vite + vanilla JS).
-- AI provider is Google Gemini (Claude removed).
-- Free-tier limits are implemented (AI monthly cap + product cap).
-- Project is ready for local development and deployment.
+The core objective is business resilience and long-term growth:
+
+- **Direct market access** to reduce middleman dependency
+- **Trust infrastructure** through verifiable badge and QR workflows
+- **Operational intelligence** with actionable analytics
+- **Decision support** via localized AI business guidance
+- **Scalable architecture** that can evolve from MVP to production-grade multi-tenant platform
+
+## Current Product Scope
+
+KashmirConnect currently delivers:
+
+- Storefront creation and management
+- Product catalog management
+- Authenticity badge request and QR generation
+- Analytics event tracking and owner insights
+- AI advisor chat with free-tier controls
+- Public discoverability routes for storefront exploration and badge verification
+
+## Tech Stack
+
+- **Frontend:** Vite + modular vanilla JavaScript architecture
+- **Backend:** Node.js + Express API (`backend/`)
+- **Database/Auth/Storage:** Supabase (PostgreSQL, Auth, Storage)
+- **AI:** Google Gemini (`gemini-2.0-flash`)
+- **Validation and tooling:** Zod, QRCode, Multer, dotenv
 
 ## Repository Structure
 
-- `frontend/` - Modular frontend app (Vite + vanilla JS)
-- `kashmirconnect-backend/` - Full Node.js + Express backend API
-- `cursor-backend-prompt.md` - Original backend scaffolding prompt
+- `frontend/` - Public landing page + modular dashboard app
+- `backend/` - API, business logic, schema, and integrations
 
-## Full Local Setup (Frontend + Backend)
+## Architecture (Future-Proof by Design)
 
-### 1) Backend Setup
+### Frontend
 
-1. Open the backend folder:
-   - `cd kashmirconnect-backend`
-2. Install dependencies:
-   - `npm install`
-3. Create environment file:
-   - copy `.env.example` to `.env`
-4. Configure required keys in `.env`:
+- `src/config` - environment and runtime configuration
+- `src/lib` - reusable API client and shared helpers
+- `src/state` - session and local app state
+- `src/services` - domain-based API service layer
+- `src/views` + `src/ui` - composable UI and page rendering modules
+
+### Backend
+
+- `src/config` - provider clients and environment wiring
+- `src/middleware` - auth, validation, centralized error handling
+- `src/routes` - API surface contracts
+- `src/controllers` - business workflows
+- `src/utils` - shared domain helpers
+- `supabase/schema.sql` - source-of-truth data model and RLS policies
+
+This structure is intentionally modular to support:
+
+- easier onboarding of new contributors
+- incremental feature delivery
+- cleaner testability and refactoring
+- future migration to microservices if scale requires it
+
+## Local Development Setup
+
+### Backend
+
+1. `cd backend`
+2. `npm install`
+3. Copy `.env.example` to `.env`
+4. Configure:
    - `SUPABASE_URL`
    - `SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
    - `GEMINI_API_KEY`
-5. Run SQL schema in Supabase:
-   - `supabase/schema.sql`
-6. Create storage buckets in Supabase:
-   - `storefront-images` (public)
-   - `product-images` (public)
-   - `qr-codes` (public)
-7. Start server:
-   - `npm run dev`
+   - `GEMINI_MODEL=gemini-2.0-flash`
+5. Run `supabase/schema.sql` in Supabase SQL editor
+6. Create public storage buckets:
+   - `storefront-images`
+   - `product-images`
+   - `qr-codes`
+7. Start backend: `npm run dev`
 
-Backend health endpoint:
+Health check:
 - `GET http://localhost:3000/health`
 
-### 2) Frontend Setup
+### Frontend
 
-1. Open frontend folder:
-   - `cd frontend`
-2. Install dependencies:
-   - `npm install`
-3. Create env:
-   - copy `.env.example` to `.env`
-4. Set API URL:
-   - `VITE_API_BASE_URL=http://localhost:3000/api/v1`
-5. Run:
-   - `npm run dev`
+1. `cd frontend`
+2. `npm install`
+3. Copy `.env.example` to `.env`
+4. Set `VITE_API_BASE_URL=http://localhost:3000/api/v1`
+5. Start frontend: `npm run dev`
 
-## Free-Tier-First Design
+## Deployment Readiness Checklist
 
-- AI uses Google Gemini (`gemini-2.0-flash`) free-tier friendly model.
-- Monthly AI usage cap is enforced via DB with `FREE_TIER_AI_LIMIT` (default `5`).
-- Product count is capped per storefront to keep usage free-tier practical.
-- Uses Supabase free-tier friendly setup for DB/Auth/Storage.
+### Backend
 
-## Architecture Snapshot
-
-- Frontend:
-  - Config: `src/config`
-  - API layer: `src/services`
-  - Shared HTTP client: `src/lib`
-  - Session state: `src/state`
-  - UI/view modules: `src/views`, `src/ui`, `src/styles`
-- Backend:
-  - Config: `src/config`
-  - Middleware: `src/middleware`
-  - Routes: `src/routes`
-  - Controllers: `src/controllers`
-  - Utilities: `src/utils`
-
-## Deployment Checklist
-
-### Backend deploy
-
-- Set backend env variables:
+- Set production env vars:
   - `SUPABASE_URL`
   - `SUPABASE_ANON_KEY`
   - `SUPABASE_SERVICE_ROLE_KEY`
   - `GEMINI_API_KEY`
-  - `GEMINI_MODEL=gemini-2.0-flash`
-  - `FREE_TIER_AI_LIMIT=5`
-  - `APP_URL=<frontend-domain>`
-- For multiple frontend domains, use comma-separated origins:
+  - `GEMINI_MODEL`
+  - `FREE_TIER_AI_LIMIT`
+  - `APP_URL`
+- If multiple frontend origins are needed:
   - `APP_URL=https://yourapp.vercel.app,https://kashmirconnect.in`
 
-### Frontend deploy
+### Frontend
 
-- Build frontend:
-  - `cd frontend`
-  - `npm run build`
-- Deploy `frontend/dist/` to static hosting (Vercel/Netlify/Cloudflare Pages/etc).
-- Set frontend env variable:
-  - `VITE_API_BASE_URL=https://your-backend-domain/api/v1`
+- Build with `npm run build`
+- Deploy `frontend/dist/` to static hosting
+- Set `VITE_API_BASE_URL=https://your-backend-domain/api/v1`
 
-## API Base URL (Local)
+## Cost and Sustainability Model
 
-- Backend API: `http://localhost:3000/api/v1`
+The project is optimized for low-cost operation while staying extensible:
 
-For complete API docs and route details, see:
-- `kashmirconnect-backend/README.md`
+- Gemini free-tier compatible model by default
+- Supabase free-tier compatible MVP setup
+- AI and product usage guardrails to control resource consumption
+- Modular codebase ready for paid-tier transitions without rewrite
 
-Frontend deployment guide:
-- `frontend/README.md`
+## Documentation
+
+- Backend implementation and API details: `backend/README.md`
+- Frontend pages, structure, and build notes: `frontend/README.md`

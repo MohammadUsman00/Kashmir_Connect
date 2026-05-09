@@ -30,6 +30,9 @@ export function renderAuthScreen() {
       <section class="panel">
         <h2>Welcome to KashmirConnect</h2>
         <p>Use your account to manage your digital storefront.</p>
+        <div style="margin: 8px 0 14px;">
+          <button id="demo-mode-btn" class="btn btn-outline">Open Demo Preview (No Login)</button>
+        </div>
         <div class="auth-grid">
           <form id="login-form" class="panel-form">
             <h3>Login</h3>

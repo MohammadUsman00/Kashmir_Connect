@@ -23,6 +23,7 @@ import { showToast } from "./ui/toast.js";
 const root = document.getElementById("app");
 const state = {
   activeTab: "profile",
+  demoMode: false,
   profile: null,
   storefrontData: null,
   badge: null,
@@ -45,6 +46,58 @@ async function hydrateData() {
   state.analytics = await getMyAnalytics().catch(() => null);
 }
 
+function hydrateDemoData() {
+  state.profile = {
+    full_name: "Demo User",
+    phone: "+91-9900000000",
+    business_name: "Demo Kashmir Crafts",
+    district: "Srinagar",
+    sector: "handicrafts",
+    bio: "Sample profile for frontend preview mode.",
+  };
+  state.storefrontData = {
+    storefront: {
+      id: "00000000-0000-0000-0000-000000000001",
+      business_name: "Demo Kashmir Crafts",
+      tagline: "Authentic handmade products",
+      description: "This is preview data shown without backend login.",
+      sector: "handicrafts",
+      district: "Srinagar",
+      phone: "+91-9900000000",
+      whatsapp: "+91-9900000000",
+      email: "demo@kashmirconnect.in",
+      instagram: "@demo_kashmircrafts",
+      public_url: "kashmirconnect.in/s/demo-kashmir-crafts",
+    },
+    products: [
+      { id: "p1", name: "Pashmina Shawl", description: "Soft handwoven shawl", price: 4500, price_unit: "piece" },
+      { id: "p2", name: "Kashmiri Carpet", description: "Traditional hand-knotted carpet", price: 18000, price_unit: "piece" },
+    ],
+  };
+  state.badge = {
+    badge_code: "KCDEMO1",
+    status: "verified",
+    qr_code_url: "https://example.com/demo-qr.png",
+  };
+  state.analytics = {
+    total_views: 342,
+    views_this_month: 89,
+    whatsapp_clicks: 23,
+    badge_scans: 12,
+    top_products: [
+      { name: "Pashmina Shawl", views: 33 },
+      { name: "Kashmiri Carpet", views: 21 },
+    ],
+  };
+}
+
+function demoGuard(event) {
+  if (!state.demoMode) return false;
+  event?.preventDefault?.();
+  showToast("Preview mode is read-only. Login to use live APIs.", "info");
+  return true;
+}
+
 function mountToastRoot() {
   if (!document.getElementById("toast-root")) {
     const toastRoot = document.createElement("div");
@@ -56,6 +109,13 @@ function mountToastRoot() {
 function bindAuthActions() {
   const loginForm = document.getElementById("login-form");
   const registerForm = document.getElementById("register-form");
+  const demoBtn = document.getElementById("demo-mode-btn");
+
+  demoBtn?.addEventListener("click", async () => {
+    state.demoMode = true;
+    showToast("Opened frontend in demo preview mode", "success");
+    await renderApp();
+  });
 
   loginForm?.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -82,6 +142,12 @@ function bindAuthActions() {
 
 function bindGlobalActions() {
   document.getElementById("logout-btn")?.addEventListener("click", async () => {
+    if (state.demoMode) {
+      state.demoMode = false;
+      showToast("Exited demo mode", "info");
+      await renderApp();
+      return;
+    }
     await logout();
     showToast("Logged out", "info");
     await renderApp();
@@ -99,6 +165,7 @@ function bindGlobalActions() {
 
 function bindProfileActions() {
   document.getElementById("profile-form")?.addEventListener("submit", async (e) => {
+    if (demoGuard(e)) return;
     e.preventDefault();
     try {
       await updateProfile(toObject(e.target));
@@ -113,6 +180,7 @@ function bindProfileActions() {
 
 function bindStorefrontActions() {
   document.getElementById("create-storefront-form")?.addEventListener("submit", async (e) => {
+    if (demoGuard(e)) return;
     e.preventDefault();
     try {
       await createStorefront(toObject(e.target));
@@ -125,6 +193,7 @@ function bindStorefrontActions() {
   });
 
   document.getElementById("update-storefront-form")?.addEventListener("submit", async (e) => {
+    if (demoGuard(e)) return;
     e.preventDefault();
     const storefrontId = e.target.dataset.id;
     try {
@@ -138,6 +207,7 @@ function bindStorefrontActions() {
   });
 
   document.getElementById("upload-cover-form")?.addEventListener("submit", async (e) => {
+    if (demoGuard(e)) return;
     e.preventDefault();
     const storefrontId = e.target.dataset.id;
     const file = e.target.cover.files[0];
@@ -151,6 +221,7 @@ function bindStorefrontActions() {
   });
 
   document.getElementById("upload-logo-form")?.addEventListener("submit", async (e) => {
+    if (demoGuard(e)) return;
     e.preventDefault();
     const storefrontId = e.target.dataset.id;
     const file = e.target.logo.files[0];
@@ -166,6 +237,7 @@ function bindStorefrontActions() {
 
 function bindProductsActions() {
   document.getElementById("create-product-form")?.addEventListener("submit", async (e) => {
+    if (demoGuard(e)) return;
     e.preventDefault();
     const storefrontId = e.target.dataset.storefrontId;
     const payload = toObject(e.target);
@@ -182,6 +254,10 @@ function bindProductsActions() {
 
   document.querySelectorAll("[data-delete-product]").forEach((button) => {
     button.addEventListener("click", async () => {
+      if (state.demoMode) {
+        showToast("Preview mode is read-only. Login to use live APIs.", "info");
+        return;
+      }
       try {
         await deleteProduct(button.dataset.deleteProduct);
         await hydrateData();
@@ -195,6 +271,7 @@ function bindProductsActions() {
 
   document.querySelectorAll("form[data-upload-product-image]").forEach((form) => {
     form.addEventListener("submit", async (e) => {
+      if (demoGuard(e)) return;
       e.preventDefault();
       const productId = form.dataset.uploadProductImage;
       const file = form.querySelector('input[name="image"]').files[0];
@@ -219,6 +296,12 @@ function bindAdvisorActions() {
     const payload = toObject(form);
     output.textContent = "Thinking...\n";
 
+    if (state.demoMode) {
+      output.textContent +=
+        "This is demo mode. For live AI advice, login and connect backend env keys.\n\nTip: Start with one product, post storefront link on WhatsApp groups, and track clicks in Analytics.";
+      return;
+    }
+
     try {
       await streamAdvisorChat(payload, {
         onChunk: (text) => {
@@ -237,6 +320,7 @@ function bindAdvisorActions() {
 
 function bindBadgeActions() {
   document.getElementById("badge-request-form")?.addEventListener("submit", async (e) => {
+    if (demoGuard(e)) return;
     e.preventDefault();
     const storefrontId = e.target.dataset.storefrontId;
     const payload = toObject(e.target);
@@ -252,6 +336,10 @@ function bindBadgeActions() {
   });
 
   document.getElementById("generate-qr-btn")?.addEventListener("click", async (e) => {
+    if (state.demoMode) {
+      showToast("Preview mode is read-only. Login to use live APIs.", "info");
+      return;
+    }
     try {
       await generateBadgeQr(e.target.dataset.badgeCode);
       await hydrateData();
@@ -289,23 +377,27 @@ function renderActiveTab() {
 async function renderApp() {
   mountToastRoot();
 
-  if (!getToken()) {
+  if (!getToken() && !state.demoMode) {
     root.innerHTML = renderAuthScreen();
     bindAuthActions();
     return;
   }
 
-  try {
-    await hydrateData();
-  } catch (error) {
-    clearSession();
-    showToast(error.message || "Session expired. Login again.", "error");
-    root.innerHTML = renderAuthScreen();
-    bindAuthActions();
-    return;
+  if (state.demoMode) {
+    hydrateDemoData();
+  } else {
+    try {
+      await hydrateData();
+    } catch (error) {
+      clearSession();
+      showToast(error.message || "Session expired. Login again.", "error");
+      root.innerHTML = renderAuthScreen();
+      bindAuthActions();
+      return;
+    }
   }
 
-  root.innerHTML = renderAppShell({ userEmail: getUser()?.email });
+  root.innerHTML = renderAppShell({ userEmail: state.demoMode ? "demo@preview.local" : getUser()?.email });
   bindGlobalActions();
   renderActiveTab();
 }
