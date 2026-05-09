@@ -13,10 +13,18 @@ dotenv.config();
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
+const allowedOrigins = (process.env.APP_URL || "")
+  .split(",")
+  .map((item) => item.trim())
+  .filter(Boolean);
 
 app.use(
   cors({
-    origin: process.env.APP_URL || "*",
+    origin(origin, callback) {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error("CORS origin blocked"));
+    },
     credentials: true,
   })
 );
