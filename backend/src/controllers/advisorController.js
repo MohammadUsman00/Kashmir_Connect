@@ -8,13 +8,14 @@ function getMonthStartIso() {
 }
 
 async function getMonthlyQueriesUsed(userId) {
-  const { data, error } = await supabase
-    .from("advisor_conversations")
-    .select("query_count")
+  const { count, error } = await supabase
+    .from("advisor_usage_events")
+    .select("*", { count: "exact", head: true })
     .eq("user_id", userId)
-    .gte("updated_at", getMonthStartIso());
+    .gte("created_at", getMonthStartIso())
+    .eq("event_type", "chat_query");
   if (error) throw error;
-  return (data || []).reduce((sum, row) => sum + (row.query_count || 0), 0);
+  return count || 0;
 }
 
 async function fetchBusinessContext(userId, storefrontId) {
@@ -149,6 +150,15 @@ export async function chat(req, res, next) {
       .eq("user_id", req.userId);
     if (updateError) throw updateError;
 
+    const { error: usageError } = await supabase.from("advisor_usage_events").insert({
+      user_id: req.userId,
+      conversation_id: conversation.id,
+      storefront_id: storefront_id || conversation.storefront_id || null,
+      event_type: "chat_query",
+      created_at: new Date().toISOString(),
+    });
+    if (usageError) throw usageError;
+
     res.write(
       `data: ${JSON.stringify({
         type: "done",
@@ -160,6 +170,11 @@ export async function chat(req, res, next) {
     );
     res.end();
   } catch (error) {
+    if (res.headersSent) {
+      res.write(`data: ${JSON.stringify({ type: "error", error: error.message || "Streaming failed" })}\n\n`);
+      res.end();
+      return;
+    }
     return next(error);
   }
 }

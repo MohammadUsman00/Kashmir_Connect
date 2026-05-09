@@ -71,6 +71,15 @@ CREATE TABLE public.advisor_conversations (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE public.advisor_usage_events (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  conversation_id UUID REFERENCES public.advisor_conversations(id) ON DELETE CASCADE,
+  storefront_id UUID REFERENCES public.storefronts(id) ON DELETE SET NULL,
+  event_type TEXT NOT NULL CHECK (event_type IN ('chat_query')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE public.analytics_events (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   storefront_id UUID REFERENCES public.storefronts(id) ON DELETE CASCADE NOT NULL,
@@ -87,6 +96,7 @@ ALTER TABLE public.storefronts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.badges ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.advisor_conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.advisor_usage_events ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users manage own profile" ON public.profiles FOR ALL USING (auth.uid() = id);
 CREATE POLICY "Users manage own storefronts" ON public.storefronts FOR ALL USING (auth.uid() = user_id);
@@ -103,3 +113,5 @@ CREATE POLICY "Users manage own badges" ON public.badges FOR ALL USING (
 CREATE POLICY "Public can view verified badges" ON public.badges FOR SELECT USING (status = 'verified');
 
 CREATE POLICY "Users manage own conversations" ON public.advisor_conversations FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Users view own advisor usage events" ON public.advisor_usage_events FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users insert own advisor usage events" ON public.advisor_usage_events FOR INSERT WITH CHECK (auth.uid() = user_id);

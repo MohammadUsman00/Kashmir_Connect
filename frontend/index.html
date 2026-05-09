@@ -47,6 +47,18 @@ nav{
 .nav-cta:hover{background:var(--walnut-mid)!important}
 .nav-hamburger{display:none;flex-direction:column;gap:4px;cursor:pointer;background:none;border:none;padding:4px}
 .nav-hamburger span{width:22px;height:2px;background:var(--walnut);border-radius:2px;transition:all .3s}
+.mobile-menu{
+  position:fixed;top:64px;left:0;right:0;z-index:99;
+  background:var(--white);
+  border-bottom:1px solid rgba(61,35,20,.15);
+  display:none;flex-direction:column;padding:.75rem 1rem;gap:.35rem;
+}
+.mobile-menu.open{display:flex}
+.mobile-menu a{
+  color:var(--walnut);text-decoration:none;font-size:.95rem;font-weight:600;
+  padding:.55rem .3rem;border-radius:6px;
+}
+.mobile-menu a:hover{background:var(--cream-dark)}
 
 /* ── HERO ── */
 .hero{
@@ -420,6 +432,7 @@ footer{
 @media(max-width:768px){
   .nav-links{display:none}
   .nav-hamburger{display:flex}
+  .mobile-menu{display:none}
   .footer-inner{grid-template-columns:1fr 1fr}
   .footer-col:first-child{grid-column:1/-1}
   .hero-stats{gap:1.5rem}
@@ -537,6 +550,13 @@ footer{
     <span></span><span></span><span></span>
   </button>
 </nav>
+<div id="mobile-menu" class="mobile-menu" aria-hidden="true">
+  <a href="#features">Features</a>
+  <a href="#how">How it works</a>
+  <a href="#sectors">Sectors</a>
+  <a href="#pricing">Pricing</a>
+  <a href="/app.html">Open Dashboard</a>
+</div>
 
 <!-- HERO -->
 <section class="hero">
@@ -1031,6 +1051,27 @@ window.addEventListener('scroll', () => {
   if(window.scrollY > 40) nav.style.boxShadow = '0 4px 24px rgba(61,35,20,.1)';
   else nav.style.boxShadow = 'none';
 });
+
+// Mobile menu toggle
+const menuBtn = document.querySelector('.nav-hamburger');
+const mobileMenu = document.getElementById('mobile-menu');
+if(menuBtn && mobileMenu){
+  const closeMenu = () => {
+    mobileMenu.classList.remove('open');
+    mobileMenu.setAttribute('aria-hidden', 'true');
+    menuBtn.setAttribute('aria-expanded', 'false');
+  };
+  menuBtn.setAttribute('aria-expanded', 'false');
+  menuBtn.addEventListener('click', () => {
+    const isOpen = mobileMenu.classList.toggle('open');
+    mobileMenu.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+    menuBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  });
+  mobileMenu.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeMenu));
+  window.addEventListener('resize', () => {
+    if(window.innerWidth > 768) closeMenu();
+  });
+}
 
 // Stats counter animation
 function animateCounter(el, target, suffix='') {

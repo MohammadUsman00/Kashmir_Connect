@@ -75,6 +75,8 @@ This structure is intentionally modular to support:
    - `SUPABASE_SERVICE_ROLE_KEY`
    - `GEMINI_API_KEY`
    - `GEMINI_MODEL=gemini-2.0-flash`
+   - `ALLOWED_ORIGINS=http://localhost:5173`
+   - `PUBLIC_APP_URL=http://localhost:5173`
 5. Run `supabase/schema.sql` in Supabase SQL editor
 6. Create public storage buckets:
    - `storefront-images`
@@ -104,9 +106,10 @@ Health check:
   - `GEMINI_API_KEY`
   - `GEMINI_MODEL`
   - `FREE_TIER_AI_LIMIT`
-  - `APP_URL`
+  - `ALLOWED_ORIGINS`
+  - `PUBLIC_APP_URL`
 - If multiple frontend origins are needed:
-  - `APP_URL=https://yourapp.vercel.app,https://kashmirconnect.in`
+  - `ALLOWED_ORIGINS=https://yourapp.vercel.app,https://kashmirconnect.in`
 
 ### Frontend
 

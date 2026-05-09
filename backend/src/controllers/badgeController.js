@@ -116,7 +116,8 @@ export async function generateBadgeQr(req, res, next) {
 
     await checkStorefrontOwnership(badge.storefront_id, req.userId);
 
-    const verifyUrl = `${process.env.APP_URL || "http://localhost:5173"}/verify/${badge_code}`;
+    const verifyAppUrl = process.env.PUBLIC_APP_URL || "http://localhost:5173";
+    const verifyUrl = `${verifyAppUrl}/verify/${badge_code}`;
     const qrBuffer = await generateQrPngBuffer(verifyUrl);
     const objectPath = `${badge_code}.png`;
 
@@ -138,11 +139,6 @@ export async function generateBadgeQr(req, res, next) {
 
 export async function adminVerifyBadge(req, res, next) {
   try {
-    const adminKey = process.env.ADMIN_API_KEY;
-    if (!adminKey || req.headers["x-admin-key"] !== adminKey) {
-      return res.status(403).json({ error: "Forbidden: admin key missing or invalid" });
-    }
-
     const { badge_id } = req.params;
     const now = new Date();
     const expiresAt = new Date(now);
@@ -165,6 +161,10 @@ export async function adminVerifyBadge(req, res, next) {
       .update({ is_verified: true })
       .eq("id", badge.storefront_id);
     if (storefrontError) throw storefrontError;
+
+    // Minimal audit visibility for admin workflows.
+    // eslint-disable-next-line no-console
+    console.info(`[admin-verify] user=${req.userId} badge=${badge_id} storefront=${badge.storefront_id}`);
 
     return res.json({ success: true, badge });
   } catch (error) {

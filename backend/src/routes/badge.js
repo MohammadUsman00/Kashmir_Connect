@@ -7,7 +7,7 @@ import {
   requestBadge,
   verifyBadgePublic,
 } from "../controllers/badgeController.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAdmin, requireAuth } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 
 const router = Router();
@@ -24,6 +24,6 @@ router.post("/request", requireAuth, validate(requestSchema), requestBadge);
 router.get("/my", requireAuth, myBadge);
 router.get("/verify/:badge_code", verifyBadgePublic);
 router.post("/generate-qr/:badge_code", requireAuth, generateBadgeQr);
-router.put("/admin/verify/:badge_id", adminVerifyBadge);
+router.put("/admin/verify/:badge_id", requireAuth, requireAdmin, adminVerifyBadge);
 
 export default router;

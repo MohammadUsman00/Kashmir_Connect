@@ -13,7 +13,7 @@ dotenv.config();
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
-const allowedOrigins = (process.env.APP_URL || "")
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || process.env.APP_URL || "")
   .split(",")
   .map((item) => item.trim())
   .filter(Boolean);

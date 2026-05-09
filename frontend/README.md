@@ -41,6 +41,8 @@ You can deploy `dist/` on Vercel, Netlify, Cloudflare Pages, or any static hosti
 
 - Set `VITE_API_BASE_URL` to your deployed backend URL, for example:
   - `https://api.yourdomain.com/api/v1`
-- On backend, set `APP_URL` to your frontend domain.
+- On backend, set:
+  - `ALLOWED_ORIGINS` to your frontend domain(s)
+  - `PUBLIC_APP_URL` to your canonical public frontend URL
 - You can set multiple frontend origins in backend using comma-separated values:
-  - `APP_URL=https://yourapp.vercel.app,https://kashmirconnect.in`
+  - `ALLOWED_ORIGINS=https://yourapp.vercel.app,https://kashmirconnect.in`

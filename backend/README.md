@@ -22,6 +22,8 @@ Production-ready Node.js + Express backend for KashmirConnect, focused on small-
    - `SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
    - `GEMINI_API_KEY`
+   - `ALLOWED_ORIGINS`
+   - `PUBLIC_APP_URL`
 4. Run DB schema in Supabase SQL editor:
    - `supabase/schema.sql`
 5. Create public storage buckets in Supabase:
@@ -93,7 +95,7 @@ Public URL formats:
 - `GET /my` (auth)
 - `GET /verify/:badge_code` public
 - `POST /generate-qr/:badge_code` (auth + owner)
-- `PUT /admin/verify/:badge_id` (admin key via `x-admin-key`)
+- `PUT /admin/verify/:badge_id` (auth + admin role in Supabase user metadata/app metadata)
 
 ### Analytics (`/analytics`)
 
@@ -122,6 +124,7 @@ Run `supabase/schema.sql` once to create:
 - Products
 - Badges
 - Advisor conversations
+- Advisor usage events (used for accurate monthly AI free-tier counting)
 - Analytics events
 - RLS policies
 

@@ -36,6 +36,9 @@ export async function streamAdvisorChat(payload, { onChunk, onDone }) {
       const data = JSON.parse(jsonText);
       if (data.type === "chunk") onChunk?.(data.text);
       if (data.type === "done") onDone?.(data);
+      if (data.type === "error") {
+        throw new Error(data.error || "Advisor streaming failed");
+      }
     }
   }
 }
