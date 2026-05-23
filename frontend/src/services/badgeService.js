@@ -15,3 +15,11 @@ export function generateBadgeQr(badgeCode) {
 export function verifyBadgeByCode(badgeCode) {
   return apiRequest(`/badges/verify/${badgeCode}`);
 }
+
+export function listPendingBadges() {
+  return apiRequest("/badges/admin/pending");
+}
+
+export function adminVerifyBadge(badgeId) {
+  return apiRequest(`/badges/admin/verify/${badgeId}`, { method: "PUT" });
+}

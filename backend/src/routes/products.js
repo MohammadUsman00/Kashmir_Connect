@@ -24,7 +24,11 @@ const createSchema = z.object({
   category: z.string().optional(),
 });
 
-const updateSchema = createSchema.omit({ storefront_id: true }).partial().refine((v) => Object.keys(v).length > 0, "No changes supplied");
+const updateSchema = createSchema
+  .omit({ storefront_id: true })
+  .extend({ is_available: z.boolean().optional() })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, "No changes supplied");
 
 const reorderSchema = z.object({
   products: z.array(

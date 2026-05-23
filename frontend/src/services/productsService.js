@@ -14,6 +14,10 @@ export function deleteProduct(productId) {
   return apiRequest(`/products/${productId}`, { method: "DELETE" });
 }
 
+export function reorderProducts(products) {
+  return apiRequest("/products/reorder", { method: "PUT", body: { products } });
+}
+
 export async function uploadProductImage(productId, file) {
   const token = getToken();
   const formData = new FormData();

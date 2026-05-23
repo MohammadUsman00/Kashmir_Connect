@@ -16,12 +16,14 @@ The core objective is business resilience and long-term growth:
 
 KashmirConnect currently delivers:
 
-- Storefront creation and management
-- Product catalog management
-- Authenticity badge request and QR generation
-- Analytics event tracking and owner insights
-- AI advisor chat with free-tier controls
-- Public discoverability routes for storefront exploration and badge verification
+- Storefront creation and management (publish/unpublish, share QR, WhatsApp share)
+- Product catalog management (edit, reorder, hide/show on public page)
+- Authenticity badge request, verification page, and admin approval workflow
+- Analytics with charts, insights, and CSV export
+- AI advisor chat with conversation history, suggested prompts, and Urdu/English support
+- Public marketplace (`/explore`), storefront pages (`/s/:slug`), and badge verify (`/verify/:code`)
+- SEO/Open Graph meta on public pages, category filters, and product inquiry via WhatsApp
+- Dashboard onboarding wizard, dark mode, and admin panel for badge review
 
 ## Tech Stack
 

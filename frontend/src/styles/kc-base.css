@@ -1,0 +1,44 @@
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;900&family=DM+Sans:wght@300;400;500;600&display=swap");
+@import "./kc-theme.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: "DM Sans", system-ui, sans-serif;
+  background: var(--cream);
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+a {
+  color: var(--walnut);
+  transition: color 0.2s;
+}
+
+a:hover {
+  color: var(--walnut-mid);
+}
+
+h1,
+h2,
+h3,
+.kc-serif {
+  font-family: "Playfair Display", serif;
+  color: var(--walnut);
+}
+
+[data-theme="dark"] h1,
+[data-theme="dark"] h2,
+[data-theme="dark"] h3,
+[data-theme="dark"] .kc-serif {
+  color: var(--gold-light);
+}

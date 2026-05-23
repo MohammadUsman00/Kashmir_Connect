@@ -1,24 +1,44 @@
 import "./styles/app.css";
+import { initTheme, getTheme, toggleTheme } from "./lib/theme.js";
+import { buildStorefrontShareText, copyToClipboard, downloadCsv, whatsappShareUrl } from "./lib/share.js";
 import { login, logout, register, getMe, updateProfile } from "./services/authService.js";
 import {
   createStorefront,
+  generateStorefrontShareQr,
   getMyStorefront,
   updateStorefront,
   uploadStorefrontImage,
 } from "./services/storefrontService.js";
-import { createProduct, deleteProduct, uploadProductImage } from "./services/productsService.js";
-import { streamAdvisorChat } from "./services/advisorService.js";
-import { generateBadgeQr, getMyBadge, requestBadge } from "./services/badgeService.js";
+import {
+  createProduct,
+  deleteProduct,
+  reorderProducts,
+  updateProduct,
+  uploadProductImage,
+} from "./services/productsService.js";
+import {
+  deleteConversation,
+  getConversation,
+  listConversations,
+  streamAdvisorChat,
+} from "./services/advisorService.js";
+import { adminVerifyBadge, generateBadgeQr, getMyBadge, listPendingBadges, requestBadge } from "./services/badgeService.js";
 import { getMyAnalytics } from "./services/analyticsService.js";
 import { clearSession, getToken, getUser } from "./state/session.js";
+import { renderAdminView } from "./views/adminView.js";
 import { renderAnalyticsView } from "./views/analyticsView.js";
 import { renderAdvisorView } from "./views/advisorView.js";
 import { renderBadgesView } from "./views/badgesView.js";
 import { renderAppShell, renderAuthScreen } from "./views/layout.js";
 import { renderProductsView } from "./views/productsView.js";
 import { renderProfileView } from "./views/profileView.js";
+import { renderSettingsView } from "./views/settingsView.js";
 import { renderStorefrontView } from "./views/storefrontView.js";
+import { getOnboardingStep, renderOnboardingBanner } from "./views/onboardingView.js";
+import { bindKcNav } from "./ui/kcNav.js";
 import { showToast } from "./ui/toast.js";
+
+initTheme();
 
 const root = document.getElementById("app");
 const state = {
@@ -28,6 +48,9 @@ const state = {
   storefrontData: null,
   badge: null,
   analytics: null,
+  advisorConversations: [],
+  activeConversationId: null,
+  pendingBadges: [],
 };
 
 function toObject(formElement) {
@@ -67,6 +90,10 @@ function hydrateDemoData() {
       whatsapp: "+91-9900000000",
       email: "demo@kashmirconnect.in",
       instagram: "@demo_kashmircrafts",
+      slug: "demo-kashmir-crafts",
+      is_active: true,
+      is_verified: true,
+      view_count: 342,
       public_url: "kashmirconnect.in/s/demo-kashmir-crafts",
     },
     products: [
@@ -88,6 +115,13 @@ function hydrateDemoData() {
       { name: "Pashmina Shawl", views: 33 },
       { name: "Kashmiri Carpet", views: 21 },
     ],
+    views_by_day: [
+      { day: "2026-05-17", views: 12 },
+      { day: "2026-05-18", views: 18 },
+      { day: "2026-05-19", views: 9 },
+      { day: "2026-05-20", views: 22 },
+      { day: "2026-05-21", views: 15 },
+    ],
   };
 }
 
@@ -106,10 +140,24 @@ function mountToastRoot() {
   }
 }
 
+function bindPasswordToggles() {
+  document.querySelectorAll(".toggle-password").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const input = btn.parentElement?.querySelector('input[type="password"], input[type="text"]');
+      if (!input) return;
+      const show = input.type === "password";
+      input.type = show ? "text" : "password";
+      btn.textContent = show ? "Hide" : "Show";
+    });
+  });
+}
+
 function bindAuthActions() {
   const loginForm = document.getElementById("login-form");
   const registerForm = document.getElementById("register-form");
   const demoBtn = document.getElementById("demo-mode-btn");
+
+  bindPasswordToggles();
 
   demoBtn?.addEventListener("click", async () => {
     state.demoMode = true;
@@ -233,6 +281,69 @@ function bindStorefrontActions() {
       showToast(error.message, "error");
     }
   });
+
+  document.getElementById("copy-storefront-link")?.addEventListener("click", async () => {
+    const url = document.getElementById("copy-storefront-link")?.dataset.url;
+    if (!url) return;
+    try {
+      await copyToClipboard(url);
+      showToast("Storefront link copied", "success");
+    } catch {
+      showToast("Could not copy link", "error");
+    }
+  });
+
+  document.getElementById("share-whatsapp-storefront")?.addEventListener("click", () => {
+    const btn = document.getElementById("share-whatsapp-storefront");
+    const text = buildStorefrontShareText(btn.dataset.name, btn.dataset.url);
+    window.open(whatsappShareUrl(text), "_blank", "noopener");
+  });
+
+  document.getElementById("generate-storefront-qr")?.addEventListener("click", async () => {
+    if (demoGuard()) return;
+    const id = document.getElementById("generate-storefront-qr")?.dataset.id;
+    try {
+      const result = await generateStorefrontShareQr(id);
+      const preview = document.getElementById("storefront-qr-preview");
+      if (preview) {
+        preview.innerHTML = `<img class="qr-img" src="${result.qr_code_url}" alt="QR code" /><p class="hint"><a href="${result.share_url}" target="_blank" rel="noopener">${result.share_url}</a></p>`;
+      }
+      showToast("Storefront QR generated", "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  });
+
+  document.getElementById("toggle-publish-storefront")?.addEventListener("click", async () => {
+    if (demoGuard()) return;
+    const btn = document.getElementById("toggle-publish-storefront");
+    const id = btn.dataset.id;
+    const publish = btn.dataset.active !== "true";
+    try {
+      await updateStorefront(id, { is_active: publish });
+      await hydrateData();
+      showToast(publish ? "Storefront published" : "Storefront unpublished", "success");
+      renderActiveTab();
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  });
+}
+
+async function moveProduct(productId, direction) {
+  const products = [...(state.storefrontData?.products || [])].sort(
+    (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
+  );
+  const index = products.findIndex((p) => p.id === productId);
+  const swapIndex = direction === "up" ? index - 1 : index + 1;
+  if (swapIndex < 0 || swapIndex >= products.length) return;
+
+  [products[index], products[swapIndex]] = [products[swapIndex], products[index]];
+  const payload = products.map((p, i) => ({ id: p.id, sort_order: i }));
+  await reorderProducts(payload);
+  await hydrateData();
+  showToast("Product order updated", "success");
+  renderActiveTab();
 }
 
 function bindProductsActions() {
@@ -284,6 +395,60 @@ function bindProductsActions() {
       }
     });
   });
+
+  document.querySelectorAll("[data-move-up]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (state.demoMode) {
+        showToast("Preview mode is read-only.", "info");
+        return;
+      }
+      try {
+        await moveProduct(button.dataset.moveUp, "up");
+      } catch (error) {
+        showToast(error.message, "error");
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-move-down]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (state.demoMode) {
+        showToast("Preview mode is read-only.", "info");
+        return;
+      }
+      try {
+        await moveProduct(button.dataset.moveDown, "down");
+      } catch (error) {
+        showToast(error.message, "error");
+      }
+    });
+  });
+
+  document.querySelectorAll(".edit-product-form").forEach((form) => {
+    form.addEventListener("submit", async (e) => {
+      if (demoGuard(e)) return;
+      e.preventDefault();
+      const productId = form.dataset.editProduct;
+      const payload = toObject(form);
+      payload.is_available = form.querySelector('[name="is_available"]')?.checked ?? true;
+      if (payload.price !== undefined && payload.price !== "") payload.price = Number(payload.price);
+      else delete payload.price;
+      try {
+        await updateProduct(productId, payload);
+        await hydrateData();
+        showToast("Product updated", "success");
+        renderActiveTab();
+      } catch (error) {
+        showToast(error.message, "error");
+      }
+    });
+  });
+}
+
+function formatMessages(messages = []) {
+  return messages
+    .map((m) => `${m.role === "user" ? "You" : "Advisor"}: ${m.content}`)
+    .join("\n\n");
 }
 
 function bindAdvisorActions() {
@@ -291,9 +456,86 @@ function bindAdvisorActions() {
   const output = document.getElementById("advisor-output");
   if (!form || !output) return;
 
+  document.querySelectorAll(".prompt-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const textarea = form.querySelector('textarea[name="message"]');
+      if (textarea) textarea.value = chip.dataset.prompt || "";
+    });
+  });
+
+  async function removeConversation(id) {
+    if (!id || state.demoMode) return;
+    await deleteConversation(id);
+    state.advisorConversations = await listConversations().catch(() => []);
+    if (state.activeConversationId === id) {
+      state.activeConversationId = null;
+      output.textContent = "";
+      document.getElementById("conversation-id").value = "";
+    }
+    if (state.activeTab === "advisor") {
+      document.getElementById("view-root").innerHTML = renderAdvisorView({
+        conversations: state.advisorConversations,
+        activeConversationId: state.activeConversationId,
+      });
+      bindAdvisorActions();
+    }
+    showToast("Conversation deleted", "info");
+  }
+
+  document.getElementById("new-conversation-btn")?.addEventListener("click", () => {
+    state.activeConversationId = null;
+    const hidden = document.getElementById("conversation-id");
+    if (hidden) hidden.value = "";
+    output.textContent = "";
+    document.querySelectorAll(".conv-row").forEach((el) => el.classList.remove("active"));
+  });
+
+  document.getElementById("delete-active-conversation")?.addEventListener("click", async () => {
+    if (!state.activeConversationId) return;
+    try {
+      await removeConversation(state.activeConversationId);
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  });
+
+  document.querySelectorAll("[data-delete-conversation]").forEach((button) => {
+    button.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      try {
+        await removeConversation(button.dataset.deleteConversation);
+      } catch (error) {
+        showToast(error.message, "error");
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-load-conversation]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (state.demoMode) {
+        showToast("Conversation history requires login.", "info");
+        return;
+      }
+      try {
+        const conv = await getConversation(button.dataset.loadConversation);
+        state.activeConversationId = conv.id;
+        document.getElementById("conversation-id").value = conv.id;
+        output.textContent = formatMessages(conv.messages || []);
+        document.querySelectorAll(".conv-row").forEach((el) => el.classList.remove("active"));
+        button.closest(".conv-row")?.classList.add("active");
+      } catch (error) {
+        showToast(error.message, "error");
+      }
+    });
+  });
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const payload = toObject(form);
+    if (!payload.conversation_id) delete payload.conversation_id;
+    if (state.storefrontData?.storefront?.id) {
+      payload.storefront_id = state.storefrontData.storefront.id;
+    }
     output.textContent = "Thinking...\n";
 
     if (state.demoMode) {
@@ -308,14 +550,55 @@ function bindAdvisorActions() {
           output.textContent += text;
           output.scrollTop = output.scrollHeight;
         },
-        onDone: (final) => {
+        onDone: async (final) => {
           output.textContent += `\n\n[Used ${final.queries_used}/${final.queries_limit} free monthly queries]`;
+          if (final.conversation_id) {
+            state.activeConversationId = final.conversation_id;
+            document.getElementById("conversation-id").value = final.conversation_id;
+          }
+          state.advisorConversations = await listConversations().catch(() => []);
+          const viewRoot = document.getElementById("view-root");
+          if (viewRoot && state.activeTab === "advisor") {
+            viewRoot.innerHTML = renderAdvisorView({
+              conversations: state.advisorConversations,
+              activeConversationId: state.activeConversationId,
+            });
+            bindAdvisorActions();
+          }
         },
       });
     } catch (error) {
       showToast(error.message, "error");
     }
   });
+}
+
+function bindOnboarding() {
+  document.getElementById("dismiss-onboarding")?.addEventListener("click", () => {
+    localStorage.setItem("kc-onboarding-dismissed", "1");
+    document.getElementById("onboarding-banner")?.remove();
+  });
+
+  document.querySelectorAll("[data-onboarding-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.activeTab = button.dataset.onboardingTab;
+      document.querySelectorAll(".tab").forEach((t) => {
+        t.classList.toggle("active", t.dataset.tab === state.activeTab);
+      });
+      renderActiveTab();
+    });
+  });
+}
+
+function mountOnboarding() {
+  if (state.demoMode || localStorage.getItem("kc-onboarding-dismissed")) return;
+  const step = getOnboardingStep(state.profile, state.storefrontData);
+  if (step > 4) return;
+
+  const shell = document.querySelector(".app-shell");
+  if (!shell) return;
+  shell.insertAdjacentHTML("afterbegin", renderOnboardingBanner(step, state.storefrontData?.storefront));
+  bindOnboarding();
 }
 
 function bindBadgeActions() {
@@ -351,15 +634,62 @@ function bindBadgeActions() {
   });
 }
 
+function bindAnalyticsActions() {
+  document.getElementById("export-analytics-csv")?.addEventListener("click", () => {
+    const a = state.analytics;
+    if (!a) return;
+    downloadCsv("kashmirconnect-analytics.csv", [
+      ["Metric", "Value"],
+      ["Total views", a.total_views],
+      ["Views this month", a.views_this_month],
+      ["WhatsApp clicks", a.whatsapp_clicks],
+      ["Badge scans", a.badge_scans],
+      [],
+      ["Day", "Views"],
+      ...(a.views_by_day || []).map((d) => [d.day, d.views]),
+      [],
+      ["Product", "Views"],
+      ...(a.top_products || []).map((p) => [p.name, p.views]),
+    ]);
+    showToast("Analytics exported", "success");
+  });
+}
+
+function bindSettingsActions() {
+  document.getElementById("theme-toggle")?.addEventListener("change", () => {
+    toggleTheme();
+    showToast(`Switched to ${getTheme()} mode`, "info");
+  });
+}
+
+function bindAdminActions() {
+  document.querySelectorAll("[data-approve-badge]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (state.demoMode) return;
+      try {
+        await adminVerifyBadge(button.dataset.approveBadge);
+        state.pendingBadges = (await listPendingBadges()).items || [];
+        showToast("Badge approved", "success");
+        renderActiveTab();
+      } catch (error) {
+        showToast(error.message, "error");
+      }
+    });
+  });
+}
+
 function bindActiveTabActions() {
   if (state.activeTab === "profile") bindProfileActions();
   if (state.activeTab === "storefront") bindStorefrontActions();
   if (state.activeTab === "products") bindProductsActions();
   if (state.activeTab === "advisor") bindAdvisorActions();
   if (state.activeTab === "badges") bindBadgeActions();
+  if (state.activeTab === "analytics") bindAnalyticsActions();
+  if (state.activeTab === "settings") bindSettingsActions();
+  if (state.activeTab === "admin") bindAdminActions();
 }
 
-function renderActiveTab() {
+async function renderActiveTab() {
   const viewRoot = document.getElementById("view-root");
   if (!viewRoot) return;
 
@@ -367,9 +697,27 @@ function renderActiveTab() {
   if (state.activeTab === "storefront") viewRoot.innerHTML = renderStorefrontView(state.storefrontData);
   if (state.activeTab === "products")
     viewRoot.innerHTML = renderProductsView(state.storefrontData?.storefront, state.storefrontData?.products || []);
-  if (state.activeTab === "advisor") viewRoot.innerHTML = renderAdvisorView();
+  if (state.activeTab === "advisor") {
+    if (!state.demoMode) {
+      state.advisorConversations = await listConversations().catch(() => []);
+    }
+    viewRoot.innerHTML = renderAdvisorView({
+      conversations: state.advisorConversations,
+      activeConversationId: state.activeConversationId,
+    });
+  }
   if (state.activeTab === "badges") viewRoot.innerHTML = renderBadgesView(state.storefrontData?.storefront, state.badge);
   if (state.activeTab === "analytics") viewRoot.innerHTML = renderAnalyticsView(state.analytics);
+  if (state.activeTab === "settings") {
+    viewRoot.innerHTML = renderSettingsView({ theme: getTheme(), role: state.profile?.role });
+  }
+  if (state.activeTab === "admin") {
+    if (!state.demoMode && state.profile?.role === "admin") {
+      const data = await listPendingBadges().catch(() => ({ items: [] }));
+      state.pendingBadges = data.items || [];
+    }
+    viewRoot.innerHTML = renderAdminView(state.pendingBadges);
+  }
 
   bindActiveTabActions();
 }
@@ -379,6 +727,7 @@ async function renderApp() {
 
   if (!getToken() && !state.demoMode) {
     root.innerHTML = renderAuthScreen();
+    bindKcNav();
     bindAuthActions();
     return;
   }
@@ -392,14 +741,20 @@ async function renderApp() {
       clearSession();
       showToast(error.message || "Session expired. Login again.", "error");
       root.innerHTML = renderAuthScreen();
+      bindKcNav();
       bindAuthActions();
       return;
     }
   }
 
-  root.innerHTML = renderAppShell({ userEmail: state.demoMode ? "demo@preview.local" : getUser()?.email });
+  root.innerHTML = renderAppShell({
+    userEmail: state.demoMode ? "demo@preview.local" : getUser()?.email,
+    isAdmin: !state.demoMode && state.profile?.role === "admin",
+  });
+  bindKcNav();
   bindGlobalActions();
-  renderActiveTab();
+  mountOnboarding();
+  await renderActiveTab();
 }
 
 renderApp();

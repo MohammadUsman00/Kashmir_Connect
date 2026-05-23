@@ -1,5 +1,18 @@
 import { API_BASE_URL } from "../config/env.js";
+import { apiRequest } from "../lib/http.js";
 import { getToken } from "../state/session.js";
+
+export function listConversations() {
+  return apiRequest("/advisor/conversations");
+}
+
+export function getConversation(id) {
+  return apiRequest(`/advisor/conversations/${id}`);
+}
+
+export function deleteConversation(id) {
+  return apiRequest(`/advisor/conversations/${id}`, { method: "DELETE" });
+}
 
 export async function streamAdvisorChat(payload, { onChunk, onDone }) {
   const token = getToken();

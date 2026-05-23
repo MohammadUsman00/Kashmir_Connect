@@ -5,6 +5,7 @@ import {
   createStorefront,
   deleteStorefront,
   exploreStorefronts,
+  generateStorefrontShareQr,
   getMyStorefront,
   getPublicStorefront,
   updateStorefront,
@@ -28,7 +29,10 @@ const storefrontSchema = z.object({
   instagram: z.string().optional(),
 });
 
-const storefrontUpdateSchema = storefrontSchema.partial().refine((v) => Object.keys(v).length > 0, "No changes supplied");
+const storefrontUpdateSchema = storefrontSchema
+  .extend({ is_active: z.boolean().optional() })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, "No changes supplied");
 
 router.post("/", requireAuth, validate(storefrontSchema), createStorefront);
 router.get("/my", requireAuth, getMyStorefront);
@@ -43,6 +47,7 @@ router.post(
   ]),
   uploadStorefrontImage
 );
+router.post("/:id/share-qr", requireAuth, generateStorefrontShareQr);
 router.delete("/:id", requireAuth, deleteStorefront);
 router.get("/explore", exploreStorefronts);
 

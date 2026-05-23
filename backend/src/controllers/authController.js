@@ -86,7 +86,9 @@ export async function me(req, res, next) {
       .eq("user_id", req.userId)
       .maybeSingle();
 
-    return res.json({ ...profile, storefront });
+    const role = req.user?.app_metadata?.role || req.user?.user_metadata?.role || "user";
+
+    return res.json({ ...profile, role, storefront });
   } catch (error) {
     return next(error);
   }

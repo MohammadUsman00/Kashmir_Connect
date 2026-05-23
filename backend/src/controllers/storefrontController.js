@@ -1,5 +1,6 @@
 import { supabase } from "../config/supabase.js";
 import { checkStorefrontOwnership } from "../utils/checkOwnership.js";
+import { generateQrPngBuffer } from "../utils/qrGenerator.js";
 import { generateUniqueSlug } from "../utils/slugGenerator.js";
 
 function buildPublicStorefrontUrl(slug) {
@@ -154,6 +155,36 @@ export async function uploadStorefrontImage(req, res, next) {
     if (updateError) throw updateError;
 
     return res.json({ url: publicData.publicUrl });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function generateStorefrontShareQr(req, res, next) {
+  try {
+    const { id } = req.params;
+    await checkStorefrontOwnership(id, req.userId);
+
+    const { data: storefront, error: sfError } = await supabase
+      .from("storefronts")
+      .select("slug")
+      .eq("id", id)
+      .single();
+    if (sfError) throw sfError;
+
+    const appUrl = process.env.PUBLIC_APP_URL || "http://localhost:5173";
+    const shareUrl = `${appUrl}/s/${storefront.slug}`;
+    const qrBuffer = await generateQrPngBuffer(shareUrl);
+    const objectPath = `storefront-${storefront.slug}.png`;
+
+    const { error: uploadError } = await supabase.storage.from("qr-codes").upload(objectPath, qrBuffer, {
+      contentType: "image/png",
+      upsert: true,
+    });
+    if (uploadError) throw uploadError;
+
+    const { data: urlData } = supabase.storage.from("qr-codes").getPublicUrl(objectPath);
+    return res.json({ qr_code_url: urlData.publicUrl, share_url: shareUrl });
   } catch (error) {
     return next(error);
   }

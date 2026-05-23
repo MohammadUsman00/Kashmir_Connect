@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/explore", "destination": "/explore.html" },
+    { "source": "/s/:slug", "destination": "/storefront.html" },
+    { "source": "/verify/:code", "destination": "/verify.html" }
+  ]
+}

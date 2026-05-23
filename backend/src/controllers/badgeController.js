@@ -137,6 +137,41 @@ export async function generateBadgeQr(req, res, next) {
   }
 }
 
+export async function listPendingBadges(req, res, next) {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("badges")
+      .select("id, badge_code, status, created_at, verification_notes, storefronts(id, business_name, sector, district, slug)")
+      .eq("status", "pending")
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+
+    const items = (data || []).map((row) => {
+      let notes = {};
+      try {
+        notes = row.verification_notes ? JSON.parse(row.verification_notes) : {};
+      } catch {
+        notes = { raw: row.verification_notes };
+      }
+      return {
+        id: row.id,
+        badge_code: row.badge_code,
+        status: row.status,
+        created_at: row.created_at,
+        business_name: row.storefronts?.business_name,
+        sector: row.storefronts?.sector,
+        district: row.storefronts?.district,
+        slug: row.storefronts?.slug,
+        verification_notes: notes,
+      };
+    });
+
+    return res.json({ items });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function adminVerifyBadge(req, res, next) {
   try {
     const { badge_id } = req.params;

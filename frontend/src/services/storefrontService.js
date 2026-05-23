@@ -30,7 +30,15 @@ export async function uploadStorefrontImage(storefrontId, file, kind) {
   return payload;
 }
 
+export function getPublicStorefront(slug) {
+  return apiRequest(`/storefronts/public/${encodeURIComponent(slug)}`);
+}
+
 export function getExploreStorefronts(queryString = "") {
   const qs = queryString ? `?${queryString}` : "";
   return apiRequest(`/storefronts/explore${qs}`);
+}
+
+export function generateStorefrontShareQr(storefrontId) {
+  return apiRequest(`/storefronts/${storefrontId}/share-qr`, { method: "POST" });
 }
