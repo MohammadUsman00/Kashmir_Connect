@@ -19,8 +19,15 @@ export function renderProductsView(storefront, products = []) {
         <input name="price" type="number" min="0" step="0.01" placeholder="Price (INR)" />
         <input name="price_unit" type="text" placeholder="Price unit (piece, kg, etc)" />
         <input name="category" type="text" placeholder="Category (e.g. Shawls)" />
+        <input name="stock_count" type="number" min="0" placeholder="Stock count (optional)" />
         <button class="btn">Add product</button>
       </form>
+      <details style="margin:1rem 0">
+        <summary class="hint" style="cursor:pointer">Bulk import CSV</summary>
+        <p class="hint">Columns: name, description, price, price_unit, category, stock_count</p>
+        <textarea id="products-csv" rows="4" placeholder="name,description,price,price_unit,category&#10;Pashmina Shawl,Soft shawl,4500,piece,Shawls"></textarea>
+        <button type="button" id="import-csv-btn" class="btn btn-outline">Import CSV</button>
+      </details>
       <div class="list">
         ${sorted
           .map(
@@ -45,11 +52,17 @@ export function renderProductsView(storefront, products = []) {
                   <input name="price" type="number" min="0" step="0.01" value="${escapeHtml(p.price ?? "")}" />
                   <input name="price_unit" type="text" value="${escapeHtml(p.price_unit)}" />
                   <input name="category" type="text" value="${escapeHtml(p.category)}" />
+                  <input name="stock_count" type="number" min="0" value="${escapeHtml(p.stock_count ?? "")}" placeholder="Stock count" />
                   <label class="toggle-row">
                     <span>Visible on public page</span>
                     <input type="checkbox" name="is_available" ${p.is_available !== false ? "checked" : ""} />
                   </label>
                   <button class="btn btn-outline">Save changes</button>
+                </form>
+                <form data-gallery-upload="${escapeHtml(p.id)}" style="margin-top:8px">
+                  <label class="hint">Add gallery image</label>
+                  <input type="file" name="image" accept="image/*" required />
+                  <button class="btn btn-outline btn-sm">Upload</button>
                 </form>
               </details>
             </div>

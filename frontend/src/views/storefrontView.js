@@ -8,6 +8,17 @@ export function renderStorefrontView(data) {
       <section class="panel">
         <span class="section-label">Storefront</span>
         <h2>Create your storefront</h2>
+        <div class="form-grid" style="margin-bottom:12px">
+          <label class="hint">Quick start with a sector template</label>
+          <select id="sector-template-select">
+            <option value="">Choose template (optional)</option>
+            <option value="handicrafts">Handicrafts</option>
+            <option value="tourism">Tourism</option>
+            <option value="agriculture">Agriculture</option>
+            <option value="food">Food</option>
+          </select>
+          <button type="button" id="apply-sector-template" class="btn btn-outline">Apply template</button>
+        </div>
         <form id="create-storefront-form" class="form-grid">
           <input required name="business_name" type="text" placeholder="Business name" />
           <input name="tagline" type="text" placeholder="Tagline" />
@@ -57,6 +68,9 @@ export function renderStorefrontView(data) {
         </button>
       </div>
       <div id="storefront-qr-preview" class="qr-preview"></div>
+      <h3>Share kit</h3>
+      <p class="hint">One-tap WhatsApp messages for your business (free).</p>
+      <div class="share-kit" id="share-kit-chips"></div>
       <form id="update-storefront-form" class="form-grid" data-id="${escapeHtml(storefront.id)}">
         <input name="business_name" type="text" placeholder="Business name" value="${escapeHtml(storefront.business_name)}" />
         <input name="tagline" type="text" placeholder="Tagline" value="${escapeHtml(storefront.tagline)}" />

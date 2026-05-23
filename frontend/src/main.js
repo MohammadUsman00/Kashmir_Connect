@@ -1,7 +1,10 @@
 import "./styles/app.css";
+import { consumeAuthHashFromUrl } from "./lib/authHash.js";
 import { initTheme, getTheme, toggleTheme } from "./lib/theme.js";
 import { buildStorefrontShareText, copyToClipboard, downloadCsv, whatsappShareUrl } from "./lib/share.js";
-import { login, logout, register, getMe, updateProfile } from "./services/authService.js";
+import { setLang } from "./lib/i18n.js";
+import { SECTOR_TEMPLATES, SHARE_TEMPLATES } from "./lib/sectorTemplates.js";
+import { login, logout, register, getMe, updateProfile, forgotPassword, updatePassword } from "./services/authService.js";
 import {
   createStorefront,
   generateStorefrontShareQr,
@@ -12,8 +15,10 @@ import {
 import {
   createProduct,
   deleteProduct,
+  importProductsCsv,
   reorderProducts,
   updateProduct,
+  uploadProductGalleryImage,
   uploadProductImage,
 } from "./services/productsService.js";
 import {
@@ -22,8 +27,23 @@ import {
   listConversations,
   streamAdvisorChat,
 } from "./services/advisorService.js";
-import { adminVerifyBadge, generateBadgeQr, getMyBadge, listPendingBadges, requestBadge } from "./services/badgeService.js";
+import {
+  adminRejectBadge,
+  adminVerifyBadge,
+  generateBadgeQr,
+  getMyBadge,
+  listPendingBadges,
+  requestBadge,
+} from "./services/badgeService.js";
 import { getMyAnalytics } from "./services/analyticsService.js";
+import { getMyLeads, updateLeadStatus } from "./services/leadsService.js";
+import { getMyOrders, updateOrderStatus } from "./services/ordersService.js";
+import { approveReview, getMyReviews } from "./services/reviewsService.js";
+import { getMyNotifications, markAllNotificationsRead } from "./services/notificationsService.js";
+import { getPlatformStats, listAdminStorefronts, setStorefrontFeatured } from "./services/adminService.js";
+import { renderLeadsView } from "./views/leadsView.js";
+import { renderOrdersView } from "./views/ordersView.js";
+import { renderReviewsManageView } from "./views/reviewsManageView.js";
 import { clearSession, getToken, getUser } from "./state/session.js";
 import { renderAdminView } from "./views/adminView.js";
 import { renderAnalyticsView } from "./views/analyticsView.js";
@@ -38,6 +58,9 @@ import { getOnboardingStep, renderOnboardingBanner } from "./views/onboardingVie
 import { bindKcNav } from "./ui/kcNav.js";
 import { showToast } from "./ui/toast.js";
 
+const authFromHash = consumeAuthHashFromUrl();
+const passwordRecoveryMode = authFromHash?.type === "recovery";
+
 initTheme();
 
 const root = document.getElementById("app");
@@ -51,6 +74,12 @@ const state = {
   advisorConversations: [],
   activeConversationId: null,
   pendingBadges: [],
+  leads: [],
+  orders: [],
+  reviews: [],
+  notifications: { items: [], unread: 0 },
+  adminStorefronts: [],
+  adminStats: null,
 };
 
 function toObject(formElement) {
@@ -64,9 +93,14 @@ function toObject(formElement) {
 
 async function hydrateData() {
   state.profile = await getMe();
+  if (state.profile?.preferred_language) setLang(state.profile.preferred_language);
   state.storefrontData = await getMyStorefront();
   state.badge = await getMyBadge();
   state.analytics = await getMyAnalytics().catch(() => null);
+  state.leads = await getMyLeads().catch(() => []);
+  state.orders = await getMyOrders().catch(() => []);
+  state.reviews = await getMyReviews().catch(() => []);
+  state.notifications = await getMyNotifications().catch(() => ({ items: [], unread: 0 }));
 }
 
 function hydrateDemoData() {
@@ -176,6 +210,41 @@ function bindAuthActions() {
     }
   });
 
+  document.getElementById("forgot-password-link")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    document.getElementById("forgot-password-form")?.classList.remove("hidden");
+  });
+
+  document.getElementById("forgot-password-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      await forgotPassword(e.target.email.value);
+      showToast("If that email exists, a reset link was sent.", "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  });
+
+  if (passwordRecoveryMode) {
+    document.getElementById("reset-password-form")?.classList.remove("hidden");
+    document.getElementById("forgot-password-form")?.classList.add("hidden");
+    document.querySelector(".auth-grid")?.classList.add("hidden");
+  }
+
+  document.getElementById("reset-password-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      await updatePassword(e.target.password.value);
+      showToast("Password updated. You can log in now.", "success");
+      e.target.reset();
+      if (passwordRecoveryMode) {
+        window.location.reload();
+      }
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  });
+
   registerForm?.addEventListener("submit", async (e) => {
     e.preventDefault();
     try {
@@ -227,11 +296,35 @@ function bindProfileActions() {
 }
 
 function bindStorefrontActions() {
+  document.getElementById("apply-sector-template")?.addEventListener("click", () => {
+    const key = document.getElementById("sector-template-select")?.value;
+    const template = SECTOR_TEMPLATES[key];
+    const form = document.getElementById("create-storefront-form");
+    if (!template || !form) {
+      showToast("Select a sector template first", "info");
+      return;
+    }
+    Object.entries(template).forEach(([k, v]) => {
+      if (k === "products") return;
+      const field = form.querySelector(`[name="${k}"]`);
+      if (field) field.value = v;
+    });
+    form.dataset.templateProducts = JSON.stringify(template.products || []);
+    showToast("Template applied — create storefront to add sample products", "success");
+  });
+
   document.getElementById("create-storefront-form")?.addEventListener("submit", async (e) => {
     if (demoGuard(e)) return;
     e.preventDefault();
     try {
-      await createStorefront(toObject(e.target));
+      const created = await createStorefront(toObject(e.target));
+      const templateProducts = e.target.dataset.templateProducts;
+      if (templateProducts && created?.id) {
+        const products = JSON.parse(templateProducts);
+        for (const p of products) {
+          await createProduct({ ...p, storefront_id: created.id, price: Number(p.price) });
+        }
+      }
       await hydrateData();
       showToast("Storefront created", "success");
       renderActiveTab();
@@ -314,6 +407,21 @@ function bindStorefrontActions() {
     }
   });
 
+  const shareKit = document.getElementById("share-kit-chips");
+  const publicUrl = document.getElementById("copy-storefront-link")?.dataset.url;
+  if (shareKit && publicUrl) {
+    const lang = localStorage.getItem("kc-lang") === "ur" ? "ur" : "en";
+    shareKit.innerHTML = SHARE_TEMPLATES.map(
+      (t) =>
+        `<button type="button" class="prompt-chip" data-share-msg="${encodeURIComponent(`${t[lang]} ${publicUrl}`)}">${t.label}</button>`
+    ).join("");
+    shareKit.querySelectorAll("[data-share-msg]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        window.open(`https://wa.me/?text=${btn.dataset.shareMsg}`, "_blank", "noopener");
+      });
+    });
+  }
+
   document.getElementById("toggle-publish-storefront")?.addEventListener("click", async () => {
     if (demoGuard()) return;
     const btn = document.getElementById("toggle-publish-storefront");
@@ -353,6 +461,7 @@ function bindProductsActions() {
     const storefrontId = e.target.dataset.storefrontId;
     const payload = toObject(e.target);
     if (payload.price) payload.price = Number(payload.price);
+    if (payload.stock_count) payload.stock_count = Number(payload.stock_count);
     try {
       await createProduct({ ...payload, storefront_id: storefrontId });
       await hydrateData();
@@ -433,11 +542,44 @@ function bindProductsActions() {
       payload.is_available = form.querySelector('[name="is_available"]')?.checked ?? true;
       if (payload.price !== undefined && payload.price !== "") payload.price = Number(payload.price);
       else delete payload.price;
+      if (payload.stock_count !== undefined && payload.stock_count !== "") payload.stock_count = Number(payload.stock_count);
+      else delete payload.stock_count;
       try {
         await updateProduct(productId, payload);
         await hydrateData();
         showToast("Product updated", "success");
         renderActiveTab();
+      } catch (error) {
+        showToast(error.message, "error");
+      }
+    });
+  });
+
+  document.getElementById("import-csv-btn")?.addEventListener("click", async () => {
+    if (state.demoMode) return;
+    const csv = document.getElementById("products-csv")?.value;
+    const storefrontId = state.storefrontData?.storefront?.id;
+    if (!csv || !storefrontId) return;
+    try {
+      const result = await importProductsCsv(storefrontId, csv);
+      await hydrateData();
+      showToast(`Imported ${result.imported} products`, "success");
+      renderActiveTab();
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  });
+
+  document.querySelectorAll("form[data-gallery-upload]").forEach((form) => {
+    form.addEventListener("submit", async (e) => {
+      if (demoGuard(e)) return;
+      e.preventDefault();
+      const productId = form.dataset.galleryUpload;
+      const file = form.querySelector('input[type="file"]').files[0];
+      if (!file) return;
+      try {
+        await uploadProductGalleryImage(productId, file);
+        showToast("Gallery image added", "success");
       } catch (error) {
         showToast(error.message, "error");
       }
@@ -660,6 +802,124 @@ function bindSettingsActions() {
     toggleTheme();
     showToast(`Switched to ${getTheme()} mode`, "info");
   });
+
+  document.getElementById("language-select")?.addEventListener("change", async (e) => {
+    setLang(e.target.value);
+    if (!state.demoMode) {
+      await updateProfile({ preferred_language: e.target.value }).catch(() => {});
+    }
+    showToast("Language updated", "success");
+    await renderApp();
+  });
+
+  document.getElementById("update-password-form")?.addEventListener("submit", async (e) => {
+    if (demoGuard(e)) return;
+    e.preventDefault();
+    try {
+      await updatePassword(e.target.password.value);
+      showToast("Password updated", "success");
+      e.target.reset();
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  });
+
+  document.getElementById("install-pwa-btn")?.addEventListener("click", async () => {
+    if (window.deferredPwaPrompt) {
+      window.deferredPwaPrompt.prompt();
+      await window.deferredPwaPrompt.userChoice;
+      window.deferredPwaPrompt = null;
+    } else {
+      showToast("Install from browser menu → Add to Home Screen", "info");
+    }
+  });
+}
+
+function bindNotificationsUi() {
+  const panel = document.getElementById("notifications-panel");
+  const btn = document.getElementById("notifications-btn");
+  if (!btn || !panel) return;
+
+  const renderPanel = () => {
+    const items = state.notifications.items || [];
+    panel.innerHTML =
+      items.length === 0
+        ? `<p class="hint">No notifications yet.</p>`
+        : items
+            .map((n) => `<div class="notif-item"><strong>${n.title}</strong><br/><span class="hint">${n.body || ""}</span></div>`)
+            .join("") + `<button type="button" class="btn btn-outline btn-sm" id="mark-all-read" style="margin-top:8px">Mark all read</button>`;
+    panel.classList.toggle("hidden", !panel.dataset.open);
+  };
+
+  btn.addEventListener("click", () => {
+    panel.dataset.open = panel.dataset.open === "1" ? "0" : "1";
+    renderPanel();
+  });
+
+  panel.addEventListener("click", async (e) => {
+    if (e.target.id === "mark-all-read" && !state.demoMode) {
+      await markAllNotificationsRead();
+      state.notifications = await getMyNotifications();
+      renderPanel();
+    }
+  });
+}
+
+function bindLeadsActions() {
+  document.querySelectorAll("[data-lead-status]").forEach((select) => {
+    select.addEventListener("change", async () => {
+      if (state.demoMode) return;
+      try {
+        await updateLeadStatus(select.dataset.leadStatus, select.value);
+        showToast("Lead updated", "success");
+      } catch (error) {
+        showToast(error.message, "error");
+      }
+    });
+  });
+}
+
+function bindOrdersActions() {
+  document.querySelectorAll("[data-order-status]").forEach((select) => {
+    select.addEventListener("change", async () => {
+      if (state.demoMode) return;
+      try {
+        await updateOrderStatus(select.dataset.orderStatus, select.value);
+        showToast("Order updated", "success");
+      } catch (error) {
+        showToast(error.message, "error");
+      }
+    });
+  });
+}
+
+function bindReviewsManageActions() {
+  document.querySelectorAll("[data-approve-review]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (state.demoMode) return;
+      try {
+        await approveReview(button.dataset.approveReview, true);
+        state.reviews = await getMyReviews();
+        showToast("Review published", "success");
+        renderActiveTab();
+      } catch (error) {
+        showToast(error.message, "error");
+      }
+    });
+  });
+  document.querySelectorAll("[data-hide-review]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (state.demoMode) return;
+      try {
+        await approveReview(button.dataset.hideReview, false);
+        state.reviews = await getMyReviews();
+        showToast("Review hidden", "info");
+        renderActiveTab();
+      } catch (error) {
+        showToast(error.message, "error");
+      }
+    });
+  });
 }
 
 function bindAdminActions() {
@@ -676,12 +936,46 @@ function bindAdminActions() {
       }
     });
   });
+
+  document.querySelectorAll("[data-reject-badge]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (state.demoMode) return;
+      const reason = window.prompt("Rejection reason for the business:");
+      if (!reason) return;
+      try {
+        await adminRejectBadge(button.dataset.rejectBadge, reason);
+        state.pendingBadges = (await listPendingBadges()).items || [];
+        showToast("Badge rejected", "info");
+        renderActiveTab();
+      } catch (error) {
+        showToast(error.message, "error");
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-toggle-featured]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (state.demoMode) return;
+      const id = button.dataset.toggleFeatured;
+      const next = button.dataset.featured !== "true";
+      try {
+        await setStorefrontFeatured(id, next);
+        showToast(next ? "Storefront featured" : "Removed from featured", "success");
+        renderActiveTab();
+      } catch (error) {
+        showToast(error.message, "error");
+      }
+    });
+  });
 }
 
 function bindActiveTabActions() {
   if (state.activeTab === "profile") bindProfileActions();
   if (state.activeTab === "storefront") bindStorefrontActions();
   if (state.activeTab === "products") bindProductsActions();
+  if (state.activeTab === "leads") bindLeadsActions();
+  if (state.activeTab === "orders") bindOrdersActions();
+  if (state.activeTab === "reviews") bindReviewsManageActions();
   if (state.activeTab === "advisor") bindAdvisorActions();
   if (state.activeTab === "badges") bindBadgeActions();
   if (state.activeTab === "analytics") bindAnalyticsActions();
@@ -697,6 +991,9 @@ async function renderActiveTab() {
   if (state.activeTab === "storefront") viewRoot.innerHTML = renderStorefrontView(state.storefrontData);
   if (state.activeTab === "products")
     viewRoot.innerHTML = renderProductsView(state.storefrontData?.storefront, state.storefrontData?.products || []);
+  if (state.activeTab === "leads") viewRoot.innerHTML = renderLeadsView(state.leads);
+  if (state.activeTab === "orders") viewRoot.innerHTML = renderOrdersView(state.orders);
+  if (state.activeTab === "reviews") viewRoot.innerHTML = renderReviewsManageView(state.reviews);
   if (state.activeTab === "advisor") {
     if (!state.demoMode) {
       state.advisorConversations = await listConversations().catch(() => []);
@@ -713,10 +1010,20 @@ async function renderActiveTab() {
   }
   if (state.activeTab === "admin") {
     if (!state.demoMode && state.profile?.role === "admin") {
-      const data = await listPendingBadges().catch(() => ({ items: [] }));
-      state.pendingBadges = data.items || [];
+      const [badges, storefronts, stats] = await Promise.all([
+        listPendingBadges().catch(() => ({ items: [] })),
+        listAdminStorefronts().catch(() => ({ items: [] })),
+        getPlatformStats().catch(() => null),
+      ]);
+      state.pendingBadges = badges.items || [];
+      state.adminStorefronts = storefronts.items || [];
+      state.adminStats = stats;
     }
-    viewRoot.innerHTML = renderAdminView(state.pendingBadges);
+    viewRoot.innerHTML = renderAdminView({
+      pendingBadges: state.pendingBadges,
+      storefronts: state.adminStorefronts,
+      stats: state.adminStats,
+    });
   }
 
   bindActiveTabActions();
@@ -725,7 +1032,7 @@ async function renderActiveTab() {
 async function renderApp() {
   mountToastRoot();
 
-  if (!getToken() && !state.demoMode) {
+  if ((!getToken() && !state.demoMode) || passwordRecoveryMode) {
     root.innerHTML = renderAuthScreen();
     bindKcNav();
     bindAuthActions();
@@ -750,11 +1057,24 @@ async function renderApp() {
   root.innerHTML = renderAppShell({
     userEmail: state.demoMode ? "demo@preview.local" : getUser()?.email,
     isAdmin: !state.demoMode && state.profile?.role === "admin",
+    unreadNotifications: state.notifications?.unread || 0,
   });
   bindKcNav();
   bindGlobalActions();
+  bindNotificationsUi();
   mountOnboarding();
   await renderActiveTab();
 }
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  window.deferredPwaPrompt = e;
+});
 
 renderApp();

@@ -1,5 +1,5 @@
 import { gemini, geminiModel } from "../config/gemini.js";
-import { supabase } from "../config/supabase.js";
+import { db } from "../config/db.js";
 import { buildSystemPrompt } from "../utils/systemPrompt.js";
 
 function getMonthStartIso() {
@@ -8,7 +8,7 @@ function getMonthStartIso() {
 }
 
 async function getMonthlyQueriesUsed(userId) {
-  const { count, error } = await supabase
+  const { count, error } = await db
     .from("advisor_usage_events")
     .select("*", { count: "exact", head: true })
     .eq("user_id", userId)
@@ -21,7 +21,7 @@ async function getMonthlyQueriesUsed(userId) {
 async function fetchBusinessContext(userId, storefrontId) {
   let storefront = null;
   if (storefrontId) {
-    const { data } = await supabase
+    const { data } = await db
       .from("storefronts")
       .select("id, business_name, sector, district")
       .eq("id", storefrontId)
@@ -29,7 +29,7 @@ async function fetchBusinessContext(userId, storefrontId) {
       .maybeSingle();
     storefront = data || null;
   } else {
-    const { data } = await supabase
+    const { data } = await db
       .from("storefronts")
       .select("id, business_name, sector, district")
       .eq("user_id", userId)
@@ -40,10 +40,10 @@ async function fetchBusinessContext(userId, storefrontId) {
   const storefrontIdToUse = storefront?.id;
   const [{ data: products }, { count: monthlyViews }] = await Promise.all([
     storefrontIdToUse
-      ? supabase.from("products").select("name").eq("storefront_id", storefrontIdToUse).eq("is_available", true)
+      ? db.from("products").select("name, stock_count, price").eq("storefront_id", storefrontIdToUse).eq("is_available", true)
       : Promise.resolve({ data: [] }),
     storefrontIdToUse
-      ? supabase
+      ? db
           .from("analytics_events")
           .select("*", { count: "exact", head: true })
           .eq("storefront_id", storefrontIdToUse)
@@ -52,16 +52,23 @@ async function fetchBusinessContext(userId, storefrontId) {
       : Promise.resolve({ count: 0 }),
   ]);
 
+  const productDetails = (products || []).map((p) => {
+    const stock =
+      p.stock_count != null && p.stock_count <= 2 ? ` (low stock: ${p.stock_count})` : "";
+    const price = p.price != null ? ` ₹${p.price}` : "";
+    return `${p.name}${price}${stock}`;
+  });
+
   return {
     storefront,
-    products: (products || []).map((p) => p.name),
+    products: productDetails,
     monthlyViews: monthlyViews || 0,
   };
 }
 
 async function getConversation(userId, conversationId) {
   if (!conversationId) return null;
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("advisor_conversations")
     .select("*")
     .eq("id", conversationId)
@@ -87,7 +94,7 @@ export async function chat(req, res, next) {
 
     let conversation = await getConversation(req.userId, conversation_id);
     if (!conversation) {
-      const { data: created, error: createError } = await supabase
+      const { data: created, error: createError } = await db
         .from("advisor_conversations")
         .insert({
           user_id: req.userId,
@@ -138,7 +145,7 @@ export async function chat(req, res, next) {
     }
 
     const updatedMessages = [...allMessages, { role: "assistant", content: finalReply }];
-    const { error: updateError } = await supabase
+    const { error: updateError } = await db
       .from("advisor_conversations")
       .update({
         storefront_id: storefront_id || conversation.storefront_id || null,
@@ -150,7 +157,7 @@ export async function chat(req, res, next) {
       .eq("user_id", req.userId);
     if (updateError) throw updateError;
 
-    const { error: usageError } = await supabase.from("advisor_usage_events").insert({
+    const { error: usageError } = await db.from("advisor_usage_events").insert({
       user_id: req.userId,
       conversation_id: conversation.id,
       storefront_id: storefront_id || conversation.storefront_id || null,
@@ -181,7 +188,7 @@ export async function chat(req, res, next) {
 
 export async function listConversations(req, res, next) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("advisor_conversations")
       .select("id, storefront_id, query_count, created_at, updated_at, messages")
       .eq("user_id", req.userId)
@@ -210,7 +217,7 @@ export async function listConversations(req, res, next) {
 export async function getConversationById(req, res, next) {
   try {
     const { id } = req.params;
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("advisor_conversations")
       .select("*")
       .eq("id", id)
@@ -226,7 +233,7 @@ export async function getConversationById(req, res, next) {
 export async function deleteConversation(req, res, next) {
   try {
     const { id } = req.params;
-    const { error } = await supabase.from("advisor_conversations").delete().eq("id", id).eq("user_id", req.userId);
+    const { error } = await db.from("advisor_conversations").delete().eq("id", id).eq("user_id", req.userId);
     if (error) throw error;
     return res.json({ success: true });
   } catch (error) {

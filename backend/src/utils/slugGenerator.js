@@ -1,5 +1,5 @@
 import slugify from "slugify";
-import { supabase } from "../config/supabase.js";
+import { db } from "../config/supabase.js";
 
 function randomSuffix(length = 5) {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -15,7 +15,7 @@ export async function generateUniqueSlug(name) {
   let slug = base || `shop-${randomSuffix(4)}`;
 
   for (let i = 0; i < 8; i += 1) {
-    const { data, error } = await supabase.from("storefronts").select("id").eq("slug", slug).limit(1);
+    const { data, error } = await db.from("storefronts").select("id").eq("slug", slug).limit(1);
 
     if (error) {
       throw error;

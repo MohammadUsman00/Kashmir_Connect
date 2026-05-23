@@ -13,3 +13,6 @@ if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
+
+/** Server DB/storage client — use after JWT + ownership checks (bypasses RLS safely). */
+export const db = supabaseAdmin;

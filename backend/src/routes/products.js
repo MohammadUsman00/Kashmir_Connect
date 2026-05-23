@@ -9,6 +9,11 @@ import {
   updateProduct,
   uploadProductImage,
 } from "../controllers/productsController.js";
+import {
+  deleteProductGalleryImage,
+  listProductImages,
+  uploadProductGalleryImage,
+} from "../controllers/productImagesController.js";
 import { requireAuth } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 
@@ -22,11 +27,12 @@ const createSchema = z.object({
   price: z.number().nonnegative().optional(),
   price_unit: z.string().optional(),
   category: z.string().optional(),
+  stock_count: z.number().int().nonnegative().optional(),
 });
 
 const updateSchema = createSchema
   .omit({ storefront_id: true })
-  .extend({ is_available: z.boolean().optional() })
+  .extend({ is_available: z.boolean().optional(), stock_count: z.number().int().nonnegative().nullable().optional() })
   .partial()
   .refine((v) => Object.keys(v).length > 0, "No changes supplied");
 
@@ -44,6 +50,9 @@ router.get("/storefront/:storefrontId", getStorefrontProducts);
 router.put("/reorder", requireAuth, validate(reorderSchema), reorderProducts);
 router.put("/:id", requireAuth, validate(updateSchema), updateProduct);
 router.post("/:id/upload-image", requireAuth, upload.single("image"), uploadProductImage);
+router.get("/:productId/gallery", requireAuth, listProductImages);
+router.post("/:productId/gallery", requireAuth, upload.single("image"), uploadProductGalleryImage);
+router.delete("/:productId/gallery/:imageId", requireAuth, deleteProductGalleryImage);
 router.delete("/:id", requireAuth, deleteProduct);
 
 export default router;

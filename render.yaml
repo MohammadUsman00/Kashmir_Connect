@@ -1,0 +1,40 @@
+# Render.com blueprint — deploy backend + static frontend
+services:
+  - type: web
+    name: kashmirconnect-api
+    env: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: PUBLIC_APP_URL
+        sync: false
+
+  - type: web
+    name: kashmirconnect-web
+    env: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /s/*
+        destination: /storefront.html
+      - type: rewrite
+        source: /verify/*
+        destination: /verify.html
+      - type: rewrite
+        source: /explore
+        destination: /explore.html

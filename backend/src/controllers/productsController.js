@@ -1,8 +1,8 @@
-import { supabase } from "../config/supabase.js";
+import { db } from "../config/db.js";
 import { checkProductOwnership, checkStorefrontOwnership } from "../utils/checkOwnership.js";
 
 async function countStorefrontProducts(storefrontId) {
-  const { count, error } = await supabase
+  const { count, error } = await db
     .from("products")
     .select("*", { count: "exact", head: true })
     .eq("storefront_id", storefrontId);
@@ -20,7 +20,7 @@ export async function createProduct(req, res, next) {
       return res.status(403).json({ error: "Free tier supports up to 10 products per storefront" });
     }
 
-    const { data, error } = await supabase.from("products").insert(req.body).select("*").single();
+    const { data, error } = await db.from("products").insert(req.body).select("*").single();
     if (error) throw error;
     return res.status(201).json(data);
   } catch (error) {
@@ -31,7 +31,7 @@ export async function createProduct(req, res, next) {
 export async function getStorefrontProducts(req, res, next) {
   try {
     const { storefrontId } = req.params;
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("products")
       .select("*")
       .eq("storefront_id", storefrontId)
@@ -48,7 +48,7 @@ export async function updateProduct(req, res, next) {
   try {
     const { id } = req.params;
     await checkProductOwnership(id, req.userId);
-    const { data, error } = await supabase.from("products").update(req.body).eq("id", id).select("*").single();
+    const { data, error } = await db.from("products").update(req.body).eq("id", id).select("*").single();
     if (error) throw error;
     return res.json(data);
   } catch (error) {
@@ -68,14 +68,14 @@ export async function uploadProductImage(req, res, next) {
     const extension = req.file.originalname.split(".").pop() || "png";
     const objectPath = `${id}/product-${Date.now()}.${extension}`;
 
-    const { error: uploadError } = await supabase.storage.from("product-images").upload(objectPath, req.file.buffer, {
+    const { error: uploadError } = await db.storage.from("product-images").upload(objectPath, req.file.buffer, {
       contentType: req.file.mimetype,
       upsert: true,
     });
     if (uploadError) throw uploadError;
 
-    const { data: publicData } = supabase.storage.from("product-images").getPublicUrl(objectPath);
-    const { error: updateError } = await supabase.from("products").update({ image_url: publicData.publicUrl }).eq("id", id);
+    const { data: publicData } = db.storage.from("product-images").getPublicUrl(objectPath);
+    const { error: updateError } = await db.from("products").update({ image_url: publicData.publicUrl }).eq("id", id);
     if (updateError) throw updateError;
 
     return res.json({ url: publicData.publicUrl });
@@ -88,7 +88,7 @@ export async function deleteProduct(req, res, next) {
   try {
     const { id } = req.params;
     await checkProductOwnership(id, req.userId);
-    const { error } = await supabase.from("products").delete().eq("id", id);
+    const { error } = await db.from("products").delete().eq("id", id);
     if (error) throw error;
     return res.json({ success: true });
   } catch (error) {
@@ -105,7 +105,7 @@ export async function reorderProducts(req, res, next) {
     }
 
     const updates = products.map((p) =>
-      supabase.from("products").update({ sort_order: p.sort_order }).eq("id", p.id)
+      db.from("products").update({ sort_order: p.sort_order }).eq("id", p.id)
     );
     await Promise.all(updates);
 

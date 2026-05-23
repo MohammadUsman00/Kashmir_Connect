@@ -23,3 +23,7 @@ export function listPendingBadges() {
 export function adminVerifyBadge(badgeId) {
   return apiRequest(`/badges/admin/verify/${badgeId}`, { method: "PUT" });
 }
+
+export function adminRejectBadge(badgeId, reason) {
+  return apiRequest(`/badges/admin/reject/${badgeId}`, { method: "PUT", body: { reason } });
+}

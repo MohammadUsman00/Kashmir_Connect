@@ -1,7 +1,7 @@
-import { supabase } from "../config/supabase.js";
+import { supabase, supabaseAdmin, db } from "../config/supabase.js";
 
 async function fetchProfile(userId) {
-  const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).single();
+  const { data, error } = await db.from("profiles").select("*").eq("id", userId).single();
   if (error) throw error;
   return data;
 }
@@ -23,7 +23,7 @@ export async function register(req, res, next) {
       throw new Error("Registration failed");
     }
 
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await db
       .from("profiles")
       .upsert({
         id: authData.user.id,
@@ -80,7 +80,7 @@ export async function me(req, res, next) {
   try {
     const profile = await fetchProfile(req.userId);
 
-    const { data: storefront } = await supabase
+    const { data: storefront } = await db
       .from("storefronts")
       .select("id, slug, business_name, is_active, is_verified, created_at")
       .eq("user_id", req.userId)
@@ -94,10 +94,38 @@ export async function me(req, res, next) {
   }
 }
 
+export async function forgotPassword(req, res, next) {
+  try {
+    const { email } = req.body;
+    const redirectTo = `${process.env.PUBLIC_APP_URL || "http://localhost:5173"}/app.html`;
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) throw error;
+
+    return res.json({
+      success: true,
+      message: "If that email exists, a reset link has been sent.",
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function updatePassword(req, res, next) {
+  try {
+    const { password } = req.body;
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(req.userId, { password });
+    if (error) throw error;
+    return res.json({ success: true, message: "Password updated" });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function updateProfile(req, res, next) {
   try {
     const payload = { ...req.body, updated_at: new Date().toISOString() };
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("profiles")
       .update(payload)
       .eq("id", req.userId)

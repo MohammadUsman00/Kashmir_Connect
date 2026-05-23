@@ -5,6 +5,8 @@ import { setPageMeta } from "./lib/meta.js";
 import { parseStorefrontSlug } from "./lib/publicPaths.js";
 import { buildStorefrontShareText, copyToClipboard } from "./lib/share.js";
 import { recordEvent } from "./services/analyticsService.js";
+import { createOrder } from "./services/ordersService.js";
+import { createReview } from "./services/reviewsService.js";
 import { getPublicStorefront } from "./services/storefrontService.js";
 import { bindKcNav, renderKcFooter, renderKcNav } from "./ui/kcNav.js";
 
@@ -29,8 +31,13 @@ function filteredProducts(products) {
 }
 
 function renderProductCard(p, storefront) {
-  const img = p.image_url ? `<img src="${escapeHtml(p.image_url)}" alt="" />` : "🛍️";
+  const galleryImg = p.gallery?.[0]?.image_url || p.image_url;
+  const img = galleryImg ? `<img src="${escapeHtml(galleryImg)}" alt="" />` : "🛍️";
   const price = p.price != null ? formatInr(p.price) + " " + escapeHtml(p.price_unit || "") : "";
+  const lowStock =
+    p.stock_count != null && p.stock_count <= 3
+      ? `<span class="product-tag" style="background:#fee2e2">Low stock: ${p.stock_count}</span>`
+      : "";
   const inquiryMsg = `Hi, I'm interested in "${p.name}" from your KashmirConnect storefront.`;
   const inquiryWa = waLink(storefront.whatsapp || storefront.phone, inquiryMsg);
 
@@ -40,6 +47,7 @@ function renderProductCard(p, storefront) {
       <div class="product-info">
         <h4>${escapeHtml(p.name)}</h4>
         ${p.category ? `<span class="product-tag">${escapeHtml(p.category)}</span>` : ""}
+        ${lowStock}
         <p class="pub-muted">${escapeHtml(p.description || "")}</p>
         <div class="product-price">${price}</div>
         ${
@@ -52,8 +60,27 @@ function renderProductCard(p, storefront) {
   `;
 }
 
+function renderReviews(reviews = []) {
+  if (!reviews.length) return "";
+  return `
+    <div class="reviews-public">
+      <h3>Customer reviews</h3>
+      ${reviews
+        .map(
+          (r) => `
+        <div class="review-card">
+          <strong>${"★".repeat(r.rating)}</strong> · ${escapeHtml(r.author_name)}
+          <p class="pub-muted">${escapeHtml(r.body || "")}</p>
+        </div>
+      `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
 function renderStorefront() {
-  const { storefront, products, badge } = storefrontData;
+  const { storefront, products, badge, reviews } = storefrontData;
   const coverStyle = storefront.cover_image_url
     ? `style="background-image:url('${escapeHtml(storefront.cover_image_url)}')"`
     : "";
@@ -119,6 +146,34 @@ function renderStorefront() {
           <div class="product-grid" id="product-grid">
             ${visible.map((p) => renderProductCard(p, storefront)).join("") || "<p class='pub-muted empty-state'>No products in this category.</p>"}
           </div>
+          ${renderReviews(reviews)}
+          <div class="pub-form-box">
+            <h4>Request an order</h4>
+            <form id="order-form" class="form-grid">
+              <input type="hidden" name="storefront_id" value="${escapeHtml(storefront.id)}" />
+              <input required name="customer_name" placeholder="Your name" />
+              <input required name="customer_phone" placeholder="Phone / WhatsApp" />
+              <input name="quantity" type="number" min="1" value="1" placeholder="Quantity" />
+              <textarea name="notes" rows="2" placeholder="Order notes (optional)"></textarea>
+              <button type="submit" class="pub-btn">Submit order request</button>
+            </form>
+          </div>
+          <div class="pub-form-box">
+            <h4>Leave a review</h4>
+            <form id="review-form" class="form-grid">
+              <input type="hidden" name="storefront_id" value="${escapeHtml(storefront.id)}" />
+              <input required name="author_name" placeholder="Your name" />
+              <select required name="rating">
+                <option value="5">★★★★★</option>
+                <option value="4">★★★★☆</option>
+                <option value="3">★★★☆☆</option>
+                <option value="2">★★☆☆☆</option>
+                <option value="1">★☆☆☆☆</option>
+              </select>
+              <textarea name="body" rows="2" placeholder="Your experience…"></textarea>
+              <button type="submit" class="pub-btn btn-outline">Submit review</button>
+            </form>
+          </div>
         </div>
       </div>
       ${renderKcFooter()}
@@ -165,6 +220,43 @@ function renderStorefront() {
       renderStorefront();
     });
   });
+
+  document.getElementById("order-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const payload = Object.fromEntries(new FormData(e.target).entries());
+    payload.quantity = Number(payload.quantity || 1);
+    try {
+      await createOrder(payload);
+      showFormMessage(e.target, "Order request sent! The business will contact you.");
+      e.target.reset();
+    } catch {
+      showFormMessage(e.target, "Could not submit. Try WhatsApp instead.", true);
+    }
+  });
+
+  document.getElementById("review-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const payload = Object.fromEntries(new FormData(e.target).entries());
+    payload.rating = Number(payload.rating);
+    try {
+      const res = await createReview(payload);
+      showFormMessage(e.target, res.message || "Thank you! Review submitted for approval.");
+      e.target.reset();
+    } catch {
+      showFormMessage(e.target, "Could not submit review.", true);
+    }
+  });
+}
+
+function showFormMessage(form, text, isError = false) {
+  let el = form.querySelector(".form-msg");
+  if (!el) {
+    el = document.createElement("p");
+    el.className = "form-msg hint";
+    form.appendChild(el);
+  }
+  el.textContent = text;
+  el.style.color = isError ? "#b91c1c" : "";
 }
 
 async function init() {

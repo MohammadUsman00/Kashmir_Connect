@@ -32,3 +32,12 @@ export async function getMe() {
 export async function updateProfile(payload) {
   return apiRequest("/auth/profile", { method: "PUT", body: payload });
 }
+
+export function forgotPassword(email) {
+  return apiRequest("/auth/forgot-password", { method: "POST", body: { email } });
+}
+
+export function updatePassword(password) {
+  return apiRequest("/auth/update-password", { method: "POST", body: { password } });
+}
+

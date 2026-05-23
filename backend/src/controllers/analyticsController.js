@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { supabase } from "../config/supabase.js";
+import { db } from "../config/supabase.js";
 
 function getMonthStartIso() {
   const now = new Date();
@@ -11,7 +11,7 @@ export async function recordEvent(req, res, next) {
     const { storefront_id, event_type, product_id, referrer } = req.body;
     const ipHash = crypto.createHash("sha256").update(req.ip || "unknown").digest("hex").slice(0, 16);
 
-    const { error } = await supabase.from("analytics_events").insert({
+    const { error } = await db.from("analytics_events").insert({
       storefront_id,
       event_type,
       product_id: product_id || null,
@@ -29,8 +29,22 @@ export async function recordEvent(req, res, next) {
 
 export async function myAnalytics(req, res, next) {
   try {
-    const { data: storefront, error: sfError } = await supabase.from("storefronts").select("id").eq("user_id", req.userId).single();
+    const { data: storefront, error: sfError } = await db
+      .from("storefronts")
+      .select("id")
+      .eq("user_id", req.userId)
+      .maybeSingle();
     if (sfError) throw sfError;
+    if (!storefront) {
+      return res.json({
+        total_views: 0,
+        views_this_month: 0,
+        whatsapp_clicks: 0,
+        badge_scans: 0,
+        top_products: [],
+        views_by_day: [],
+      });
+    }
 
     const storefrontId = storefront.id;
     const monthStart = getMonthStartIso();
@@ -44,34 +58,34 @@ export async function myAnalytics(req, res, next) {
       topProductsResp,
       dailyViewsResp,
     ] = await Promise.all([
-      supabase
+      db
         .from("analytics_events")
         .select("*", { count: "exact", head: true })
         .eq("storefront_id", storefrontId)
         .eq("event_type", "view"),
-      supabase
+      db
         .from("analytics_events")
         .select("*", { count: "exact", head: true })
         .eq("storefront_id", storefrontId)
         .eq("event_type", "view")
         .gte("created_at", monthStart),
-      supabase
+      db
         .from("analytics_events")
         .select("*", { count: "exact", head: true })
         .eq("storefront_id", storefrontId)
         .eq("event_type", "whatsapp_click"),
-      supabase
+      db
         .from("analytics_events")
         .select("*", { count: "exact", head: true })
         .eq("storefront_id", storefrontId)
         .eq("event_type", "badge_scan"),
-      supabase
+      db
         .from("analytics_events")
         .select("product_id, products(name)")
         .eq("storefront_id", storefrontId)
         .eq("event_type", "product_view")
         .not("product_id", "is", null),
-      supabase
+      db
         .from("analytics_events")
         .select("created_at")
         .eq("storefront_id", storefrontId)

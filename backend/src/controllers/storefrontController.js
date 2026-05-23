@@ -1,4 +1,4 @@
-import { supabase } from "../config/supabase.js";
+import { db } from "../config/db.js";
 import { checkStorefrontOwnership } from "../utils/checkOwnership.js";
 import { generateQrPngBuffer } from "../utils/qrGenerator.js";
 import { generateUniqueSlug } from "../utils/slugGenerator.js";
@@ -11,7 +11,7 @@ export async function createStorefront(req, res, next) {
   try {
     const slug = await generateUniqueSlug(req.body.business_name);
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("storefronts")
       .insert({
         ...req.body,
@@ -34,7 +34,7 @@ export async function createStorefront(req, res, next) {
 
 export async function getMyStorefront(req, res, next) {
   try {
-    const { data: storefront, error } = await supabase
+    const { data: storefront, error } = await db
       .from("storefronts")
       .select("*")
       .eq("user_id", req.userId)
@@ -46,8 +46,8 @@ export async function getMyStorefront(req, res, next) {
     }
 
     const [{ data: products }, { data: badge }] = await Promise.all([
-      supabase.from("products").select("*").eq("storefront_id", storefront.id).order("sort_order", { ascending: true }),
-      supabase.from("badges").select("*").eq("storefront_id", storefront.id).maybeSingle(),
+      db.from("products").select("*").eq("storefront_id", storefront.id).order("sort_order", { ascending: true }),
+      db.from("badges").select("*").eq("storefront_id", storefront.id).maybeSingle(),
     ]);
 
     return res.json({
@@ -66,7 +66,7 @@ export async function getMyStorefront(req, res, next) {
 export async function getPublicStorefront(req, res, next) {
   try {
     const { slug } = req.params;
-    const { data: storefront, error } = await supabase
+    const { data: storefront, error } = await db
       .from("storefronts")
       .select("*")
       .eq("slug", slug)
@@ -75,19 +75,45 @@ export async function getPublicStorefront(req, res, next) {
 
     if (error) throw error;
 
-    const [{ data: products }, { data: badge }] = await Promise.all([
-      supabase
+    const [{ data: products }, { data: badge }, { data: reviews }] = await Promise.all([
+      db
         .from("products")
         .select("*")
         .eq("storefront_id", storefront.id)
         .eq("is_available", true)
         .order("sort_order", { ascending: true }),
-      supabase.from("badges").select("*").eq("storefront_id", storefront.id).eq("status", "verified").maybeSingle(),
+      db.from("badges").select("*").eq("storefront_id", storefront.id).eq("status", "verified").maybeSingle(),
+      db
+        .from("reviews")
+        .select("*")
+        .eq("storefront_id", storefront.id)
+        .eq("is_approved", true)
+        .order("created_at", { ascending: false })
+        .limit(20),
     ]);
 
+    const productIds = (products || []).map((p) => p.id);
+    let imagesByProduct = {};
+    if (productIds.length) {
+      const { data: images } = await db
+        .from("product_images")
+        .select("*")
+        .in("product_id", productIds)
+        .order("sort_order", { ascending: true });
+      for (const img of images || []) {
+        if (!imagesByProduct[img.product_id]) imagesByProduct[img.product_id] = [];
+        imagesByProduct[img.product_id].push(img);
+      }
+    }
+
+    const productsWithImages = (products || []).map((p) => ({
+      ...p,
+      gallery: imagesByProduct[p.id] || [],
+    }));
+
     await Promise.all([
-      supabase.from("storefronts").update({ view_count: (storefront.view_count || 0) + 1 }).eq("id", storefront.id),
-      supabase.from("analytics_events").insert({
+      db.from("storefronts").update({ view_count: (storefront.view_count || 0) + 1 }).eq("id", storefront.id),
+      db.from("analytics_events").insert({
         storefront_id: storefront.id,
         event_type: "view",
         referrer: req.headers.referer || null,
@@ -100,8 +126,9 @@ export async function getPublicStorefront(req, res, next) {
         ...storefront,
         public_url: buildPublicStorefrontUrl(storefront.slug),
       },
-      products: products || [],
+      products: productsWithImages,
       badge: badge || null,
+      reviews: reviews || [],
     });
   } catch (error) {
     return next(error);
@@ -113,7 +140,7 @@ export async function updateStorefront(req, res, next) {
     const { id } = req.params;
     await checkStorefrontOwnership(id, req.userId);
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("storefronts")
       .update({ ...req.body, updated_at: new Date().toISOString() })
       .eq("id", id)
@@ -143,15 +170,15 @@ export async function uploadStorefrontImage(req, res, next) {
     const extension = chosenFile.originalname.split(".").pop() || "png";
     const objectPath = `${id}/${field}-${Date.now()}.${extension}`;
 
-    const { error: uploadError } = await supabase.storage.from("storefront-images").upload(objectPath, chosenFile.buffer, {
+    const { error: uploadError } = await db.storage.from("storefront-images").upload(objectPath, chosenFile.buffer, {
       contentType: chosenFile.mimetype,
       upsert: true,
     });
     if (uploadError) throw uploadError;
 
-    const { data: publicData } = supabase.storage.from("storefront-images").getPublicUrl(objectPath);
+    const { data: publicData } = db.storage.from("storefront-images").getPublicUrl(objectPath);
 
-    const { error: updateError } = await supabase.from("storefronts").update({ [field]: publicData.publicUrl }).eq("id", id);
+    const { error: updateError } = await db.from("storefronts").update({ [field]: publicData.publicUrl }).eq("id", id);
     if (updateError) throw updateError;
 
     return res.json({ url: publicData.publicUrl });
@@ -165,7 +192,7 @@ export async function generateStorefrontShareQr(req, res, next) {
     const { id } = req.params;
     await checkStorefrontOwnership(id, req.userId);
 
-    const { data: storefront, error: sfError } = await supabase
+    const { data: storefront, error: sfError } = await db
       .from("storefronts")
       .select("slug")
       .eq("id", id)
@@ -177,13 +204,13 @@ export async function generateStorefrontShareQr(req, res, next) {
     const qrBuffer = await generateQrPngBuffer(shareUrl);
     const objectPath = `storefront-${storefront.slug}.png`;
 
-    const { error: uploadError } = await supabase.storage.from("qr-codes").upload(objectPath, qrBuffer, {
+    const { error: uploadError } = await db.storage.from("qr-codes").upload(objectPath, qrBuffer, {
       contentType: "image/png",
       upsert: true,
     });
     if (uploadError) throw uploadError;
 
-    const { data: urlData } = supabase.storage.from("qr-codes").getPublicUrl(objectPath);
+    const { data: urlData } = db.storage.from("qr-codes").getPublicUrl(objectPath);
     return res.json({ qr_code_url: urlData.publicUrl, share_url: shareUrl });
   } catch (error) {
     return next(error);
@@ -195,7 +222,7 @@ export async function deleteStorefront(req, res, next) {
     const { id } = req.params;
     await checkStorefrontOwnership(id, req.userId);
 
-    const { error } = await supabase
+    const { error } = await db
       .from("storefronts")
       .update({ is_active: false, updated_at: new Date().toISOString() })
       .eq("id", id);
@@ -214,12 +241,13 @@ export async function exploreStorefronts(req, res, next) {
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    let query = supabase
+    let query = db
       .from("storefronts")
       .select("*", { count: "exact" })
       .eq("is_active", true)
-      .eq("is_verified", true)
       .range(from, to)
+      .order("is_featured", { ascending: false })
+      .order("is_verified", { ascending: false })
       .order("created_at", { ascending: false });
 
     if (req.query.sector) {

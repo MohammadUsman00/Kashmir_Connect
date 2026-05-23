@@ -1,7 +1,7 @@
-import { supabase } from "../config/supabase.js";
+import { db } from "../config/supabase.js";
 
 export async function checkStorefrontOwnership(storefrontId, userId) {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("storefronts")
     .select("id, user_id")
     .eq("id", storefrontId)
@@ -23,7 +23,7 @@ export async function checkStorefrontOwnership(storefrontId, userId) {
 }
 
 export async function checkProductOwnership(productId, userId) {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("products")
     .select("id, storefronts!inner(id, user_id)")
     .eq("id", productId)

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import {
+  adminRejectBadge,
   adminVerifyBadge,
   generateBadgeQr,
   listPendingBadges,
@@ -27,5 +28,7 @@ router.get("/verify/:badge_code", verifyBadgePublic);
 router.post("/generate-qr/:badge_code", requireAuth, generateBadgeQr);
 router.get("/admin/pending", requireAuth, requireAdmin, listPendingBadges);
 router.put("/admin/verify/:badge_id", requireAuth, requireAdmin, adminVerifyBadge);
+const rejectSchema = z.object({ reason: z.string().min(1) });
+router.put("/admin/reject/:badge_id", requireAuth, requireAdmin, validate(rejectSchema), adminRejectBadge);
 
 export default router;

@@ -29,7 +29,7 @@ function renderList(items) {
           return `
         <a class="explore-card" href="${escapeHtml(getStorefrontPath(s.slug))}">
           <div class="explore-cover" ${cover}></div>
-          <h3>${escapeHtml(s.business_name)}</h3>
+          <h3>${escapeHtml(s.business_name)} ${s.is_featured ? '<span class="product-tag">Featured</span>' : ""}</h3>
           <p class="pub-muted">${escapeHtml(s.tagline || s.sector || "")}</p>
           <p class="pub-muted">${escapeHtml(s.district || "")}</p>
         </a>
