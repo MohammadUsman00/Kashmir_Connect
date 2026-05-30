@@ -41,6 +41,7 @@ export function attachEmergencySocketServer(httpServer: HTTPServer): IOServer {
   });
 
   io.on("connection", (socket: Socket) => {
+    socket.on("join-room", (room: string) => socket.join(room));
     socket.on("join:admin", () => socket.join("admin-dashboard"));
     socket.on("join:district", (district: string) => socket.join(`district-${district}`));
     socket.on("join:emergencyType", (type: string) => socket.join(`emergency-${type}`));
