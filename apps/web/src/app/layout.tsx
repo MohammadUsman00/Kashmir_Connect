@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Noto_Nastaliq_Urdu } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
+import { KashmirAssistant } from "@/components/ai/KashmirAssistant";
 import "./globals.css";
 
 const geist = Geist({
@@ -22,7 +23,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }):
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geist.variable} ${nastaliq.variable}`}>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          {children}
+          <KashmirAssistant />
+        </ThemeProvider>
       </body>
     </html>
   );
