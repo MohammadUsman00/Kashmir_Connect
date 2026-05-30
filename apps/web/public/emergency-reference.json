@@ -1,0 +1,21 @@
+{
+  "numbers": {
+    "allInOne": "112",
+    "police": "100",
+    "fire": "101",
+    "ambulance": "102",
+    "emergencyMedicalTransport": "108",
+    "womenHelpline": "1091",
+    "disasterControlJK": "1070"
+  },
+  "hospitals": [
+    { "name": "SMHS Hospital Srinagar", "phone": "102" },
+    { "name": "SKIMS Soura", "phone": "102" },
+    { "name": "District Hospital Anantnag", "phone": "102" }
+  ],
+  "policeStations": [
+    { "name": "Police Control Room Srinagar", "phone": "100" },
+    { "name": "Kothibagh Police Station", "phone": "100" },
+    { "name": "Gulmarg Police Station", "phone": "100" }
+  ]
+}
