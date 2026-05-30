@@ -3,6 +3,7 @@ import superjson from "superjson";
 import { z } from "zod";
 import type { TRPCContext } from "./context";
 import { advisorRateLimit, analyticsRateLimit, authRateLimit } from "./rate-limit";
+export { requirePermission, hasPermission, rolePermissions } from "@/lib/security/rbac";
 
 const t = initTRPC.context<TRPCContext>().create({
   transformer: superjson

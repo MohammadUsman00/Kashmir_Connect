@@ -345,3 +345,20 @@ model GroupAnnouncement {
   group      CollegeGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   author     User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
 }
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String
+  action      String
+  resourceType String
+  resourceId  String
+  ipAddress   String
+  userAgent   String
+  payloadHash String
+  timestamp   DateTime @default(now())
+  success     Boolean
+  errorCode   String?
+
+  @@index([userId, timestamp])
+  @@index([action, timestamp])
+}
