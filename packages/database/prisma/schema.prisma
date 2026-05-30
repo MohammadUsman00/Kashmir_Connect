@@ -1,0 +1,167 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  MERCHANT
+  ADMIN
+  USER
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum BadgeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AnalyticsEventType {
+  VIEW
+  WHATSAPP_CLICK
+  PRODUCT_VIEW
+}
+
+model User {
+  id            String          @id @default(uuid())
+  email         String          @unique
+  role          Role            @default(USER)
+  profile       Json?
+  createdAt     DateTime        @default(now())
+  storefront    Storefront?
+  orders        Order[]
+  notifications Notification[]
+  advisorUsage  AIAdvisorUsage[]
+}
+
+model Storefront {
+  id          String           @id @default(uuid())
+  userId      String           @unique
+  slug        String           @unique
+  name        String
+  description String?
+  sector      String
+  published   Boolean          @default(false)
+  featured    Boolean          @default(false)
+  verified    Boolean          @default(false)
+  coverUrl    String?
+  logoUrl     String?
+  whatsapp    String?
+  createdAt   DateTime         @default(now())
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  products    Product[]
+  orders      Order[]
+  leads       Lead[]
+  reviews     Review[]
+  badge       Badge?
+  analytics   AnalyticsEvent[]
+}
+
+model Product {
+  id           String   @id @default(uuid())
+  storefrontId String
+  name         String
+  description  String?
+  price        Decimal  @db.Decimal(10, 2)
+  stock        Int?
+  hidden       Boolean  @default(false)
+  images       Json
+  order        Int      @default(0)
+  createdAt    DateTime @default(now())
+  storefront   Storefront @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  orderItems   Order[]
+
+  @@index([storefrontId, order])
+}
+
+model Order {
+  id            String      @id @default(uuid())
+  storefrontId   String
+  customerName   String
+  customerPhone  String
+  customerEmail  String?
+  items          Json
+  status         OrderStatus @default(PENDING)
+  createdAt      DateTime    @default(now())
+  storefront     Storefront  @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  product        Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productId      String?
+  user           User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId         String?
+}
+
+model Lead {
+  id           String    @id @default(uuid())
+  storefrontId String
+  name         String?
+  phone        String?
+  message      String?
+  createdAt    DateTime  @default(now())
+  storefront   Storefront @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+}
+
+model Review {
+  id           String    @id @default(uuid())
+  storefrontId String
+  authorName   String
+  rating       Int
+  body         String?
+  approved     Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  storefront   Storefront @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+
+  @@index([storefrontId, approved])
+}
+
+model Badge {
+  id          String      @id @default(uuid())
+  storefrontId String     @unique
+  status      BadgeStatus @default(PENDING)
+  requestedAt DateTime    @default(now())
+  reviewedAt  DateTime?
+  code        String      @unique
+  storefront  Storefront  @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+}
+
+model AnalyticsEvent {
+  id           String             @id @default(uuid())
+  storefrontId String
+  type         AnalyticsEventType
+  metadata     Json?
+  createdAt    DateTime           @default(now())
+  storefront   Storefront         @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+
+  @@index([storefrontId, createdAt])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  body      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read, createdAt])
+}
+
+model AIAdvisorUsage {
+  id        String   @id @default(uuid())
+  userId    String
+  month     String
+  count     Int      @default(0)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, month])
+}
