@@ -64,14 +64,21 @@ export function KCNavbar({
       <AnimatePresence>
         {open ? (
           <div className="md:hidden">
-            <motion.button
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               className="fixed inset-0 z-40 bg-black/35 backdrop-blur-[2px]"
               aria-label="Close mobile menu"
+              role="button"
+              tabIndex={0}
               onClick={() => setOpen(false)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  setOpen(false);
+                }
+              }}
             />
             <motion.div
               initial={{ x: "100%" }}
@@ -82,7 +89,7 @@ export function KCNavbar({
             >
               <div className="mb-4 flex justify-end">
                 <KCButton variant="ghost" size="sm" onClick={() => setOpen(false)}>
-                  ✕
+                  X
                 </KCButton>
               </div>
               <div className="flex flex-col gap-2">
@@ -98,7 +105,7 @@ export function KCNavbar({
                 ))}
                 {rightSlot ? <div className="pt-3">{rightSlot}</div> : null}
               </div>
-            </div>
+            </motion.div>
           </div>
         ) : null}
       </AnimatePresence>
