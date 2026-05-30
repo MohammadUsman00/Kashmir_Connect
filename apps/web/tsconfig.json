@@ -6,7 +6,6 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "types": ["node", "next", "next/types/global", "next/image-types/global"],
     "incremental": true
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

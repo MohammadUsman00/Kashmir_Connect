@@ -44,11 +44,13 @@
     "socket.io-client": "^4.8.1",
     "superjson": "^2.2.2",
     "twilio": "^5.4.1",
+    "typesense": "^2.0.2",
     "zod": "^3.24.1",
     "clsx": "^2.1.1",
     "tailwind-merge": "^2.6.0"
   },
   "devDependencies": {
+    "@types/node": "^22.10.2",
     "@types/react": "^18.3.17",
     "@types/react-dom": "^18.3.5",
     "@tailwindcss/postcss": "^4.0.0",

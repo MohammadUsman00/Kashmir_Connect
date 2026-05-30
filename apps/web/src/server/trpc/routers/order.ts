@@ -9,7 +9,7 @@ export const orderRouter = createTRPCRouter({
         customerName: z.string().min(1),
         customerPhone: z.string().min(5),
         customerEmail: z.string().email().optional(),
-        items: z.array(z.object({ productId: z.string().uuid(), qty: z.number().int().positive() }))
+        items: z.array(z.object({ productId: z.string().uuid().optional(), qty: z.number().int().positive() })).min(1)
       })
     )
     .mutation(({ ctx, input }) => ctx.prisma.order.create({ data: input })),

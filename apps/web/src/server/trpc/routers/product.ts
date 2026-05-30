@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, merchantProcedure, publicProcedure } from "../init";
+import { indexStorefrontById } from "@/lib/search/typesense";
 
 export const productRouter = createTRPCRouter({
   byStorefront: publicProcedure
@@ -23,7 +24,11 @@ export const productRouter = createTRPCRouter({
         order: z.number().int().default(0)
       })
     )
-    .mutation(({ ctx, input }) => ctx.prisma.product.create({ data: input })),
+    .mutation(async ({ ctx, input }) => {
+      const product = await ctx.prisma.product.create({ data: input });
+      await indexStorefrontById(input.storefrontId).catch(() => undefined);
+      return product;
+    }),
   update: merchantProcedure
     .input(
       z.object({
@@ -50,10 +55,12 @@ export const productRouter = createTRPCRouter({
       if (!existing || existing.storefrontId !== input.storefrontId) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Product not found for storefront" });
       }
-      return ctx.prisma.product.update({
+      const updated = await ctx.prisma.product.update({
         where: { id: input.productId },
         data: input.data
       });
+      await indexStorefrontById(input.storefrontId).catch(() => undefined);
+      return updated;
     }),
   delete: merchantProcedure
     .input(z.object({ storefrontId: z.string().uuid(), productId: z.string().uuid() }))
@@ -65,6 +72,8 @@ export const productRouter = createTRPCRouter({
       if (!existing || existing.storefrontId !== input.storefrontId) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Product not found for storefront" });
       }
-      return ctx.prisma.product.delete({ where: { id: input.productId } });
+      const deleted = await ctx.prisma.product.delete({ where: { id: input.productId } });
+      await indexStorefrontById(input.storefrontId).catch(() => undefined);
+      return deleted;
     })
 });
