@@ -31,6 +31,25 @@ enum AnalyticsEventType {
   PRODUCT_VIEW
 }
 
+enum PostType {
+  ANNOUNCEMENT
+  EVENT
+  LOST_FOUND
+  VOLUNTEER
+  DISCUSSION
+}
+
+enum LostFoundItemType {
+  LOST
+  FOUND
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+}
+
 model User {
   id            String          @id @default(uuid())
   email         String          @unique
@@ -41,6 +60,14 @@ model User {
   orders        Order[]
   notifications Notification[]
   advisorUsage  AIAdvisorUsage[]
+  posts         Post[]
+  notes         Note[]
+  internships   Internship[]    @relation("InternshipPostedBy")
+  jobs          Job[]           @relation("JobPostedBy")
+  postVotes     PostVote[]
+  eventRsvps    EventRsvp[]
+  groupMembers  CollegeGroupMember[]
+  groupAnnouncements GroupAnnouncement[]
 }
 
 model Storefront {
@@ -164,4 +191,157 @@ model AIAdvisorUsage {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, month])
+}
+
+model Post {
+  id          String   @id @default(uuid())
+  authorId    String
+  type        PostType
+  title       String
+  body        String
+  images      String[]
+  district    String
+  tehsil      String?
+  pinned      Boolean  @default(false)
+  resolved    Boolean  @default(false)
+  upvotes     Int      @default(0)
+  createdAt   DateTime @default(now())
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  event       Event?
+  lostFound   LostFoundItem?
+  volunteer   VolunteerOpportunity?
+  votes       PostVote[]
+
+  @@index([district, createdAt])
+  @@index([type, createdAt])
+}
+
+model Event {
+  id           String   @id @default(uuid())
+  postId       String   @unique
+  date         DateTime
+  location     String
+  coordinates  Json?
+  rsvpCount    Int      @default(0)
+  maxAttendees Int?
+  ticketPrice  Decimal? @db.Decimal(10, 2)
+  post         Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  rsvps        EventRsvp[]
+}
+
+model LostFoundItem {
+  id                String           @id @default(uuid())
+  postId            String           @unique
+  itemType          LostFoundItemType
+  category          String
+  lastSeenLocation  String
+  contactPhone      String
+  resolved          Boolean          @default(false)
+  post              Post             @relation(fields: [postId], references: [id], onDelete: Cascade)
+}
+
+model VolunteerOpportunity {
+  id           String   @id @default(uuid())
+  postId       String   @unique
+  organization String
+  skills       String[]
+  startDate    DateTime
+  endDate      DateTime?
+  slots        Int
+  post         Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+}
+
+model Note {
+  id          String   @id @default(uuid())
+  authorId    String
+  subject     String
+  class       String
+  university  String
+  fileUrl     String
+  downloads   Int      @default(0)
+  verified    Boolean  @default(false)
+  ocrText     String?
+  createdAt   DateTime @default(now())
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([subject, university])
+}
+
+model Internship {
+  id          String   @id @default(uuid())
+  companyName String
+  role        String
+  location    String
+  stipend     String?
+  deadline    DateTime
+  applyUrl    String
+  postedBy    String
+  createdAt   DateTime @default(now())
+  poster      User     @relation("InternshipPostedBy", fields: [postedBy], references: [id], onDelete: Cascade)
+}
+
+model Job {
+  id          String         @id @default(uuid())
+  companyName String
+  role        String
+  location    String
+  salary      String?
+  type        EmploymentType
+  deadline    DateTime
+  applyUrl    String
+  preferLocal Boolean        @default(false)
+  postedBy    String
+  createdAt   DateTime       @default(now())
+  poster      User           @relation("JobPostedBy", fields: [postedBy], references: [id], onDelete: Cascade)
+}
+
+model PostVote {
+  postId     String
+  userId     String
+  createdAt  DateTime @default(now())
+  post       Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+}
+
+model EventRsvp {
+  eventId     String
+  userId      String
+  createdAt   DateTime @default(now())
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, userId])
+}
+
+model CollegeGroup {
+  id            String               @id @default(uuid())
+  slug          String               @unique
+  name          String
+  members       CollegeGroupMember[]
+  announcements GroupAnnouncement[]
+  createdAt     DateTime             @default(now())
+}
+
+model CollegeGroupMember {
+  groupId    String
+  userId     String
+  createdAt  DateTime     @default(now())
+  group      CollegeGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+}
+
+model GroupAnnouncement {
+  id         String       @id @default(uuid())
+  groupId    String
+  authorId   String
+  title      String
+  body       String
+  pinned     Boolean      @default(false)
+  createdAt  DateTime     @default(now())
+  group      CollegeGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  author     User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
 }

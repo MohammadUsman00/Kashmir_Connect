@@ -44,6 +44,7 @@ export function attachEmergencySocketServer(httpServer: HTTPServer): IOServer {
     socket.on("join:admin", () => socket.join("admin-dashboard"));
     socket.on("join:district", (district: string) => socket.join(`district-${district}`));
     socket.on("join:emergencyType", (type: string) => socket.join(`emergency-${type}`));
+    socket.on("join:user", (userId: string) => socket.join(`user-${userId}`));
 
     socket.on("sos:new", (payload: SOSEventPayload) => {
       io.to("admin-dashboard").emit("sos:new", payload);
