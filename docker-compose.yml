@@ -1,0 +1,126 @@
+name: kashmir-connect-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kc_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kashmir_connect
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - kc_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d kashmir_connect"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks:
+      - kashmir_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: kc_redis
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - kc_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks:
+      - kashmir_network
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    container_name: kc_web
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/kashmir_connect
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/web/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 6
+    networks:
+      - kashmir_network
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: kc_worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/kashmir_connect
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"process.exit(0)\""]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+    networks:
+      - kashmir_network
+
+  pgadmin:
+    image: dpage/pgadmin4:8.11
+    container_name: kc_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@kashmirconnect.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "False"
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/misc/ping || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 6
+    networks:
+      - kashmir_network
+
+volumes:
+  kc_postgres_data:
+  kc_redis_data:
+
+networks:
+  kashmir_network:
+    driver: bridge

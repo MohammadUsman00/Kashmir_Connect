@@ -1,51 +1,25 @@
-const STATIC_CACHE = "kc-emergency-static-v1";
-const DATA_CACHE = "kc-emergency-data-v1";
+const STATIC_CACHE = "kc-shell-v3";
+const PAGE_CACHE = "kc-pages-v3";
+const IMAGE_CACHE = "kc-images-v3";
+const API_CACHE = "kc-api-v3";
 const SOS_QUEUE_DB = "kc-emergency-db";
 const SOS_QUEUE_STORE = "sosQueue";
+const API_MAX_STALE_MS = 5 * 60 * 1000;
+const IMAGE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
-const EMERGENCY_BOOTSTRAP = [
-  "/",
-  "/api/emergency/alerts",
-  "/api/sos",
-  "/emergency-reference.json"
-];
+const APP_SHELL = ["/", "/map", "/emergency", "/explore", "/offline.html"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(STATIC_CACHE).then((cache) => cache.addAll(EMERGENCY_BOOTSTRAP)).then(() => self.skipWaiting())
+    caches
+      .open(STATIC_CACHE)
+      .then((cache) => cache.addAll(APP_SHELL))
+      .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
-});
-
-self.addEventListener("fetch", (event) => {
-  const url = new URL(event.request.url);
-  const shouldCache =
-    url.pathname.startsWith("/api/emergency/alerts") ||
-    url.pathname.startsWith("/api/sos") ||
-    url.pathname.includes("mapbox.com");
-
-  if (!shouldCache || event.request.method !== "GET") return;
-
-  event.respondWith(
-    caches.open(DATA_CACHE).then(async (cache) => {
-      const cached = await cache.match(event.request);
-      if (cached) {
-        fetch(event.request)
-          .then((fresh) => {
-            if (fresh.ok) cache.put(event.request, fresh.clone());
-          })
-          .catch(() => undefined);
-        return cached;
-      }
-
-      const response = await fetch(event.request);
-      if (response.ok) cache.put(event.request, response.clone());
-      return response;
-    })
-  );
 });
 
 function openSOSDB() {
@@ -62,12 +36,28 @@ function openSOSDB() {
   });
 }
 
-async function drainSOSQueue() {
+async function queueSOSRequest(request) {
+  const clone = request.clone();
+  const payload = await clone.json();
+  const db = await openSOSDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(SOS_QUEUE_STORE, "readwrite");
+    tx.objectStore(SOS_QUEUE_STORE).put({
+      id: crypto.randomUUID(),
+      payload,
+      createdAt: Date.now()
+    });
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+}
+
+async function replayQueuedSOS() {
   const db = await openSOSDB();
   const items = await new Promise((resolve, reject) => {
     const tx = db.transaction(SOS_QUEUE_STORE, "readonly");
-    const store = tx.objectStore(SOS_QUEUE_STORE);
-    const req = store.getAll();
+    const req = tx.objectStore(SOS_QUEUE_STORE).getAll();
     req.onsuccess = () => resolve(req.result || []);
     req.onerror = () => reject(req.error);
   });
@@ -82,19 +72,109 @@ async function drainSOSQueue() {
       await new Promise((resolve, reject) => {
         const tx = db.transaction(SOS_QUEUE_STORE, "readwrite");
         tx.objectStore(SOS_QUEUE_STORE).delete(item.id);
-        tx.oncomplete = () => resolve();
+        tx.oncomplete = resolve;
         tx.onerror = () => reject(tx.error);
       });
     } catch {
-      // keep queued for next sync
+      // Keep queued for next sync cycle.
     }
   }
   db.close();
 }
 
+async function cacheFirstImages(request) {
+  const cache = await caches.open(IMAGE_CACHE);
+  const cached = await cache.match(request);
+  if (cached) {
+    const cachedAt = Number(cached.headers.get("sw-cached-at") || "0");
+    if (Date.now() - cachedAt <= IMAGE_MAX_AGE_MS) return cached;
+  }
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const withTimestamp = new Response(response.body, response);
+      withTimestamp.headers.append("sw-cached-at", String(Date.now()));
+      cache.put(request, withTimestamp.clone());
+      return withTimestamp;
+    }
+    return cached || response;
+  } catch {
+    return cached || caches.match("/offline.html");
+  }
+}
+
+async function networkFirstApi(request) {
+  const cache = await caches.open(API_CACHE);
+  try {
+    const fresh = await fetch(request);
+    if (fresh.ok && request.method === "GET") {
+      const stamped = new Response(fresh.body, fresh);
+      stamped.headers.append("sw-cached-at", String(Date.now()));
+      cache.put(request, stamped.clone());
+      return stamped;
+    }
+    return fresh;
+  } catch {
+    const cached = await cache.match(request);
+    if (!cached) return new Response(JSON.stringify({ error: "offline" }), { status: 503 });
+    const cachedAt = Number(cached.headers.get("sw-cached-at") || "0");
+    if (Date.now() - cachedAt > API_MAX_STALE_MS) return new Response(JSON.stringify({ error: "stale" }), { status: 503 });
+    return cached;
+  }
+}
+
+async function staleWhileRevalidatePages(request) {
+  const cache = await caches.open(PAGE_CACHE);
+  const cached = await cache.match(request);
+  const network = fetch(request)
+    .then((response) => {
+      if (response.ok) {
+        cache.put(request, response.clone());
+      }
+      return response;
+    })
+    .catch(() => cached || caches.match("/offline.html"));
+  return cached || network;
+}
+
+self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
+  const isImage = event.request.destination === "image";
+  const isApi = url.pathname.startsWith("/api/");
+  const isSOS = url.pathname === "/api/sos";
+  const isPage = event.request.mode === "navigate";
+
+  if (isSOS && event.request.method === "POST") {
+    event.respondWith(
+      fetch(event.request.clone()).catch(async () => {
+        await queueSOSRequest(event.request);
+        return new Response(JSON.stringify({ queued: true }), {
+          status: 202,
+          headers: { "Content-Type": "application/json" }
+        });
+      })
+    );
+    return;
+  }
+
+  if (isApi) {
+    event.respondWith(networkFirstApi(event.request));
+    return;
+  }
+
+  if (isImage) {
+    event.respondWith(cacheFirstImages(event.request));
+    return;
+  }
+
+  if (isPage) {
+    event.respondWith(staleWhileRevalidatePages(event.request));
+  }
+});
+
 self.addEventListener("sync", (event) => {
   if (event.tag === "sos-sync") {
-    event.waitUntil(drainSOSQueue());
+    event.waitUntil(replayQueuedSOS());
   }
 });
 
@@ -102,27 +182,34 @@ self.addEventListener("periodicsync", (event) => {
   if (event.tag === "emergency-refresh-6h") {
     event.waitUntil(
       Promise.all([
-        fetch("/api/emergency/alerts").catch(() => undefined),
-        fetch("/api/sos").catch(() => undefined)
+        fetch("/emergency-reference.json").catch(() => undefined),
+        fetch("/api/emergency/alerts").catch(() => undefined)
       ])
     );
   }
 });
 
 self.addEventListener("push", (event) => {
-  const payload = event.data?.json?.() ?? { title: "Emergency Alert", body: "New safety update available." };
+  const payload = event.data?.json?.() ?? {};
+  const title = payload.title || "Kashmir Connect Alert";
+  const body = payload.body || "Important update from Kashmir Connect.";
   event.waitUntil(
-    self.registration.showNotification(payload.title || "Emergency Alert", {
-      body: payload.body || "Please check Kashmir Connect emergency center.",
+    self.registration.showNotification(title, {
+      body,
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png",
-      data: payload
+      data: payload,
+      actions: [
+        { action: "open-emergency", title: "Open Emergency" },
+        { action: "dismiss", title: "Dismiss" }
+      ]
     })
   );
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || "/emergency";
-  event.waitUntil(clients.openWindow(url));
+  if (event.action === "dismiss") return;
+  const targetUrl = event.notification.data?.url || "/emergency";
+  event.waitUntil(clients.openWindow(targetUrl));
 });

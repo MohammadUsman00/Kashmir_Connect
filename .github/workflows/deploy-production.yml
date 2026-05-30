@@ -1,0 +1,81 @@
+name: Deploy Production
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  ci:
+    name: Full CI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm --filter @kashmir/web exec tsc --noEmit
+      - run: pnpm --filter @kashmir/web exec eslint . --max-warnings 0
+      - run: pnpm --filter @kashmir/web exec jest --ci --coverage
+      - run: pnpm --filter @kashmir/web exec next build
+
+  release-and-deploy:
+    name: Release + Deploy Vercel
+    runs-on: ubuntu-latest
+    needs: ci
+    env:
+      DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+      SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --no-frozen-lockfile
+      - name: Create release with changelog
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          tag_name: v${{ github.run_number }}
+          name: Kashmir Connect v${{ github.run_number }}
+      - name: Run production migrations
+        run: pnpm --filter @kashmir/web exec prisma migrate deploy
+      - name: Deploy to Vercel (zero-downtime)
+        run: |
+          npm i -g vercel
+          vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
+          vercel build --prod --token "$VERCEL_TOKEN"
+          vercel deploy --prebuilt --prod --token "$VERCEL_TOKEN"
+      - name: Playwright smoke tests
+        run: |
+          npx playwright install --with-deps chromium
+          node -e "const https=require('https');https.get(process.env.PRODUCTION_URL+'/api/health',res=>{if(res.statusCode!==200){process.exit(1)};process.exit(0);});"
+      - name: Notify Sentry release
+        run: |
+          npx @sentry/cli releases new "kashmir-connect@${{ github.run_number }}"
+          npx @sentry/cli releases set-commits "kashmir-connect@${{ github.run_number }}" --auto
+          npx @sentry/cli releases finalize "kashmir-connect@${{ github.run_number }}"
+      - name: Notify Slack
+        run: |
+          payload=$(printf '{"text":"✅ Kashmir Connect v%s deployed to production"}' "${{ github.run_number }}")
+          curl -X POST -H 'Content-type: application/json' --data "$payload" "$SLACK_WEBHOOK_URL"

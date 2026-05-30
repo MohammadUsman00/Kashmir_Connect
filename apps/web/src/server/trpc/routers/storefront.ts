@@ -2,6 +2,7 @@ import { z } from "zod";
 import { storefrontCreateSchema, storefrontQuerySchema, storefrontUpdateSchema } from "@kashmir/types";
 import { createTRPCRouter, merchantProcedure, protectedProcedure, publicProcedure } from "../init";
 import { indexStorefrontById } from "@/lib/search/typesense";
+import { trackPosthogEvent } from "@/lib/monitoring/posthog";
 
 export const storefrontRouter = createTRPCRouter({
   bySlug: publicProcedure.input(z.object({ slug: z.string().min(3) })).query(({ ctx, input }) => {
@@ -104,6 +105,10 @@ export const storefrontRouter = createTRPCRouter({
         user: { connect: { id: ctx.user.id } }
       });
       await indexStorefrontById(storefront.id).catch(() => undefined);
+      await trackPosthogEvent(ctx.user.id, "storefront_created", {
+        storefrontId: storefront.id,
+        sector: storefront.sector
+      });
       return storefront;
     }),
   update: merchantProcedure

@@ -4,6 +4,8 @@ import { prisma } from "@kashmir/db";
 import { auth } from "@/server/auth";
 import { getEmergencySocketServer, type SOSEventPayload } from "@/lib/emergency/socket";
 import { sendEmergencySMS } from "@/lib/emergency/sms";
+import { withSOSTransaction } from "@/instrumentation";
+import { trackPosthogEvent } from "@/lib/monitoring/posthog";
 
 export const runtime = "nodejs";
 
@@ -24,7 +26,8 @@ function caseId(): string {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  try {
+  return withSOSTransaction(async () => {
+    try {
     const body = (await request.json()) as SOSRequestBody;
     const session = await auth();
     const userId = session?.user?.id ?? "anonymous";
@@ -79,6 +82,9 @@ export async function POST(request: Request): Promise<Response> {
     io?.to("admin-dashboard").emit("sos:new", payload);
     io?.to(`district-${district}`).emit("sos:new", payload);
     io?.to(`emergency-${type}`).emit("sos:new", payload);
+    if (userId !== "anonymous") {
+      await trackPosthogEvent(userId, "sos_triggered", { district, type, offlineQueued: Boolean(body.offlineQueued) });
+    }
 
     return NextResponse.json({
       success: true,
@@ -96,12 +102,13 @@ export async function POST(request: Request): Promise<Response> {
         disasterControlJK: "1070"
       }
     });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "SOS activation failed" },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "SOS activation failed" },
+        { status: 500 }
+      );
+    }
+  });
 }
 
 export async function GET(): Promise<Response> {

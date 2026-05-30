@@ -1,0 +1,39 @@
+{
+  "name": "Kashmir Connect",
+  "short_name": "KashmirConnect",
+  "description": "Kashmir's digital operating system for community, safety, commerce, and tourism.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#3D1F0D",
+  "background_color": "#FAF6EF",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Emergency",
+      "url": "/emergency"
+    },
+    {
+      "name": "Map",
+      "url": "/map"
+    },
+    {
+      "name": "AI Assistant",
+      "url": "/?ai=open"
+    }
+  ]
+}

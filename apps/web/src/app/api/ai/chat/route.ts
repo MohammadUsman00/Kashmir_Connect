@@ -5,6 +5,8 @@ import { prisma } from "@kashmir/db";
 import { auth } from "@/server/auth";
 import { streamAssistantResponse, type ChatMessage } from "@/lib/ai/agent";
 import type { AssistantLanguage, AssistantMode } from "@/lib/ai/prompts";
+import { withAIAdvisorTransaction } from "@/instrumentation";
+import { trackPosthogEvent } from "@/lib/monitoring/posthog";
 
 export const runtime = "nodejs";
 
@@ -67,7 +69,8 @@ async function enforceDailyRateLimit(userId: string | null): Promise<{ ok: true 
 }
 
 export async function POST(request: Request): Promise<Response> {
-  try {
+  return withAIAdvisorTransaction(async () => {
+    try {
     const body = (await request.json()) as ChatBody;
     const { messages, mode, language, sessionId, action } = body;
     if (!sessionId) return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
@@ -159,6 +162,7 @@ export async function POST(request: Request): Promise<Response> {
               create: { userId, month: monthKey(), count: 1 },
               update: { count: { increment: 1 } }
             });
+            await trackPosthogEvent(userId, "ai_query", { mode, language, sessionId });
           }
           controller.close();
         } catch (error) {
@@ -177,10 +181,11 @@ export async function POST(request: Request): Promise<Response> {
         Connection: "keep-alive"
       }
     });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Chat API failed" },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "Chat API failed" },
+        { status: 500 }
+      );
+    }
+  });
 }

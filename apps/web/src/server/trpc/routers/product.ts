@@ -2,6 +2,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, merchantProcedure, publicProcedure } from "../init";
 import { indexStorefrontById } from "@/lib/search/typesense";
+import { trackPosthogEvent } from "@/lib/monitoring/posthog";
 
 export const productRouter = createTRPCRouter({
   byStorefront: publicProcedure
@@ -27,6 +28,10 @@ export const productRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const product = await ctx.prisma.product.create({ data: input });
       await indexStorefrontById(input.storefrontId).catch(() => undefined);
+      await trackPosthogEvent(ctx.user.id, "product_added", {
+        productId: product.id,
+        storefrontId: input.storefrontId
+      });
       return product;
     }),
   update: merchantProcedure

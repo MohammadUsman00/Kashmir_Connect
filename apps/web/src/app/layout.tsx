@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Noto_Nastaliq_Urdu } from "next/font/google";
+import { Analytics } from "@vercel/analytics/react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { KashmirAssistant } from "@/components/ai/KashmirAssistant";
 import "./globals.css";
@@ -16,7 +17,8 @@ const nastaliq = Noto_Nastaliq_Urdu({
 
 export const metadata: Metadata = {
   title: "Kashmir Connect",
-  description: "Kashmir's Digital Operating System - Apple clarity, Airbnb warmth, Kashmir culture"
+  description: "Kashmir's Digital Operating System - Apple clarity, Airbnb warmth, Kashmir culture",
+  manifest: "/manifest.json"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }): JSX.Element {
@@ -26,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }):
         <ThemeProvider>
           {children}
           <KashmirAssistant />
+          <Analytics />
         </ThemeProvider>
       </body>
     </html>
